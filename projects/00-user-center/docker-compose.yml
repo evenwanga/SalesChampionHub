@@ -1,5 +1,10 @@
 version: '3.8'
 
+# ==========================================
+# 子项目0: 多租户统一用户中心
+# 使用共享基础设施层 (../infrastructure)
+# ==========================================
+
 services:
   # Logto 核心服务
   logto:
@@ -9,25 +14,20 @@ services:
       - "3001:3001"  # 核心API
       - "3002:3002"  # 管理控制台
     environment:
-      # 数据库连接
-      - DB_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/logto
+      # 数据库连接（使用共享 PostgreSQL）
+      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024}@saleschampion-postgres:5432/logto
 
       # 服务端点（生产环境需要修改为实际域名）
       - ENDPOINT=http://localhost:3001
       - ADMIN_ENDPOINT=http://localhost:3002
 
-      # 信任的代理（如果使用Nginx）
+      # 信任的代理（使用Kong）
       - TRUST_PROXY_HEADER=1
 
       # 日志级别
       - LOG_LEVEL=info
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - user_center_network
+      - saleschampion_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/status"]
@@ -49,12 +49,13 @@ services:
       - LOGTO_ENDPOINT=http://logto:3001
       - LOGTO_ADMIN_ENDPOINT=http://logto:3002
 
-      # 数据库连接
-      - DB_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/logto
+      # 数据库连接（使用共享 PostgreSQL）
+      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024}@saleschampion-postgres:5432/logto
 
-      # Redis连接
-      - REDIS_URL=redis://redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # Redis连接（使用共享 Redis DB 0）
+      - REDIS_URL=redis://saleschampion-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-SalesChampion_Redis_2024}
+      - REDIS_DB=0
 
       # 服务密钥（用于服务间调用）
       - SERVICE_API_KEY=${SERVICE_API_KEY}
@@ -68,116 +69,16 @@ services:
     depends_on:
       logto:
         condition: service_started
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - user_center_network
-    # volumes:
-    #   - ./custom-api:/app
-    #   - /app/node_modules
+      - saleschampion_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:3003/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # PostgreSQL数据库
-  postgres:
-    image: postgres:16-alpine
-    container_name: user-center-postgres
-    ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=logto
-      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=en_US.UTF-8
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-    networks:
-      - user_center_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command:
-      - "postgres"
-      - "-c"
-      - "max_connections=200"
-      - "-c"
-      - "shared_buffers=256MB"
-      - "-c"
-      - "effective_cache_size=1GB"
-
-  # Redis缓存
-  redis:
-    image: redis:7-alpine
-    container_name: user-center-redis
-    ports:
-      - "6380:6379"
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-    volumes:
-      - redis_data:/data
-    networks:
-      - user_center_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Nginx反向代理（开发环境使用HTTP，生产环境使用HTTPS）
-  nginx:
-    image: nginx:alpine
-    container_name: user-center-nginx
-    ports:
-      - "80:80"
-      # 生产环境启用HTTPS
-      # - "443:443"
-    volumes:
-      # 开发环境使用nginx.dev.conf（HTTP only）
-      - ./deployments/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
-      # 生产环境切换为nginx.conf（HTTPS）
-      # - ./deployments/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # - ./deployments/nginx/certs:/etc/nginx/certs:ro
-      - nginx_logs:/var/log/nginx
-    depends_on:
-      logto:
-        condition: service_started
-      custom-api:
-        condition: service_started
-    networks:
-      - user_center_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  nginx_logs:
-    driver: local
 
 networks:
-  user_center_network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/16
+  saleschampion_network:
+    external: true
+    name: infrastructure_saleschampion_network
