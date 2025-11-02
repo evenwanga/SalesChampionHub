@@ -1,99 +1,132 @@
 #!/bin/bash
 
-# 用户中心启动脚本
+# ============================================
+# 子项目0: 多租户统一用户中心 - 启动脚本
+# ============================================
 
 set -e
 
-echo "🚀 启动用户中心服务..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$(dirname "$PROJECT_DIR")")"
 
-# 检查.env文件
-if [ ! -f .env ]; then
-    echo "❌ 错误: .env 文件不存在"
-    echo "请先运行: cp .env.example .env"
+echo "🏢 子项目0: 多租户统一用户中心"
+echo "============================================"
+echo ""
+
+# 1. 检查基础设施依赖
+echo "📋 步骤 1/4: 检查基础设施依赖..."
+
+required_services=("saleschampion-postgres" "saleschampion-redis")
+missing_services=()
+
+for service in "${required_services[@]}"; do
+    if ! docker ps --format "{{.Names}}" | grep -q "^${service}$"; then
+        missing_services+=("$service")
+    fi
+done
+
+if [ ${#missing_services[@]} -gt 0 ]; then
+    echo "❌ 缺少必需的基础设施服务: ${missing_services[*]}"
+    echo ""
+    echo "💡 请先启动共享基础设施:"
+    echo "   cd $ROOT_DIR/infrastructure"
+    echo "   ./scripts/startup.sh"
+    echo ""
     exit 1
 fi
 
-# 检查Docker是否运行
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ 错误: Docker未运行"
-    echo "请先启动Docker"
-    exit 1
-fi
+echo "✅ 基础设施服务已就绪"
+echo ""
 
-# 检查端口占用
-check_port() {
-    local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        echo "❌ 错误: 端口 $port 已被占用"
-        echo "请检查并关闭占用该端口的进程"
+# 2. 检查环境配置
+echo "⚙️  步骤 2/4: 检查环境配置..."
+
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+    echo "⚠️  .env 文件不存在，从 .env.example 复制..."
+    if [ -f "$PROJECT_DIR/.env.example" ]; then
+        cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+        echo "✅ 已创建 .env 文件，请检查配置"
+    else
+        echo "❌ .env.example 文件不存在"
         exit 1
     fi
-}
+else
+    echo "✅ 环境配置文件存在"
+fi
+echo ""
 
-echo "⏳ 检查端口..."
-check_port 3001
-check_port 3002
-check_port 3003
-check_port 5432
-check_port 6379
+# 3. 初始化Logto数据库
+echo "🗄️  步骤 3/4: 检查Logto数据库初始化状态..."
 
-echo "✅ 端口检查通过"
+DB_CHECK=$(docker exec saleschampion-postgres psql -U postgres -d logto -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='applications';" 2>/dev/null || echo "0")
 
-# 启动服务
-echo "⏳ 启动Docker Compose服务..."
+if [ "$DB_CHECK" = "0" ]; then
+    echo "⚠️  Logto数据库未初始化，正在初始化..."
+    cd "$PROJECT_DIR"
+    docker-compose run --rm --entrypoint "npm run cli db seed" logto
+    echo "✅ 数据库初始化完成"
+
+    # 启用RLS
+    echo "🔒 启用Row-Level Security..."
+    docker exec saleschampion-postgres psql -U postgres -d logto << 'EOF'
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')
+    LOOP
+        EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' ENABLE ROW LEVEL SECURITY';
+    END LOOP;
+END $$;
+EOF
+    echo "✅ RLS已启用"
+else
+    echo "✅ Logto数据库已初始化"
+fi
+echo ""
+
+# 4. 启动服务
+echo "🚀 步骤 4/4: 启动用户中心服务..."
+cd "$PROJECT_DIR"
 docker-compose up -d
 
 echo ""
 echo "⏳ 等待服务启动..."
-sleep 10
+sleep 15
 
-# 检查服务健康状态
+# 5. 验证服务状态
 echo ""
-echo "⏳ 检查服务健康状态..."
+echo "🏥 验证服务健康状态..."
 
-check_health() {
-    local url=$1
-    local name=$2
-    local max_attempts=30
-    local attempt=1
+services=("logto-core" "user-center-custom-api")
+all_healthy=true
 
-    while [ $attempt -le $max_attempts ]; do
-        if curl -s "$url" > /dev/null 2>&1; then
-            echo "✅ $name 服务已就绪"
-            return 0
-        fi
-        echo "   等待 $name 服务启动... ($attempt/$max_attempts)"
-        sleep 2
-        attempt=$((attempt + 1))
-    done
-
-    echo "❌ $name 服务启动超时"
-    return 1
-}
-
-check_health "http://localhost:3001/api/health" "Logto核心"
-check_health "http://localhost:3003/health" "Custom API"
+for service in "${services[@]}"; do
+    if docker ps --filter "name=$service" --format "{{.Status}}" | grep -q "Up"; then
+        echo "✅ $service: 运行中"
+    else
+        echo "❌ $service: 未运行"
+        all_healthy=false
+    fi
+done
 
 echo ""
-echo "=========================================="
-echo "✅ 用户中心服务启动成功！"
-echo "=========================================="
-echo ""
-echo "📝 服务访问地址:"
-echo "  - Logto管理控制台: http://localhost:3002"
-echo "  - Logto核心API:    http://localhost:3001"
-echo "  - Custom API:      http://localhost:3003"
-echo "  - PostgreSQL:      localhost:5432"
-echo "  - Redis:           localhost:6379"
-echo ""
-echo "📖 下一步:"
-echo "  1. 访问管理控制台创建第一个管理员账号"
-echo "  2. 创建组织(Organization)和应用(Application)"
-echo "  3. 运行: ./scripts/create-first-tenant.sh 查看详细指引"
-echo ""
-echo "🔧 常用命令:"
-echo "  - 查看日志: docker-compose logs -f"
-echo "  - 停止服务: ./scripts/stop.sh"
-echo "  - 重启服务: ./scripts/restart.sh"
-echo "  - 健康检查: ./scripts/health-check.sh"
-echo ""
+echo "============================================"
+
+if [ "$all_healthy" = true ]; then
+    echo "✅ 用户中心服务启动成功!"
+    echo ""
+    echo "📍 服务访问地址:"
+    echo "   Logto Console:     http://localhost:3002"
+    echo "   Logto API:         http://localhost:3001"
+    echo "   Custom API:        http://localhost:3003"
+    echo "   Health Check:      http://localhost:3003/health"
+    echo ""
+    echo "📝 查看日志:"
+    echo "   docker-compose logs -f"
+else
+    echo "⚠️  部分服务启动失败，请检查日志"
+    echo "   docker-compose logs"
+    exit 1
+fi

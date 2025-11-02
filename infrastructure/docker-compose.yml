@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SalesChampion_PG_2024}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ../docker_data/postgres:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - saleschampion_network
@@ -60,7 +60,7 @@ services:
       --save 300 10
       --save 60 10000
     volumes:
-      - redis_data:/data
+      - ../docker_data/redis:/data
     networks:
       - saleschampion_network
     restart: unless-stopped
@@ -161,11 +161,8 @@ services:
       kong:
         condition: service_healthy
 
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
+# 注意: 持久化数据存储在 ../docker_data/ 目录
+# volumes 配置已移除，改用本地目录映射
 
 networks:
   saleschampion_network:
