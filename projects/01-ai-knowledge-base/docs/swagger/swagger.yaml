@@ -1,0 +1,688 @@
+basePath: /api/v1
+definitions:
+  middleware.ErrorDetail:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  middleware.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/middleware.ErrorDetail'
+      meta:
+        $ref: '#/definitions/middleware.MetaInfo'
+      success:
+        type: boolean
+    type: object
+  middleware.MetaInfo:
+    properties:
+      path:
+        type: string
+      request_id:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  middleware.SuccessResponse:
+    properties:
+      data: {}
+      meta:
+        $ref: '#/definitions/middleware.MetaInfo'
+      success:
+        type: boolean
+    type: object
+  models.JSONMap:
+    additionalProperties: true
+    type: object
+  models.KnowledgeBase:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      document_count:
+        type: integer
+      id:
+        type: string
+      last_updated_at:
+        type: string
+      name:
+        type: string
+      owner_id:
+        description: From sub-project 0
+        type: string
+      settings:
+        $ref: '#/definitions/models.JSONMap'
+      tags:
+        items:
+          type: string
+        type: array
+      total_size_bytes:
+        type: integer
+      updated_at:
+        type: string
+      visibility:
+        description: public, private, shared
+        type: string
+    type: object
+  models.KnowledgeBaseMount:
+    properties:
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      kb_id:
+        type: string
+      knowledge_base:
+        allOf:
+        - $ref: '#/definitions/models.KnowledgeBase'
+        description: Relations
+      mount_type:
+        description: tenant, organization, user
+        type: string
+      mounted_at:
+        type: string
+      mounted_by:
+        type: string
+      organization_id:
+        type: string
+      permissions:
+        $ref: '#/definitions/models.JSONMap'
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  service.CreateKBRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      owner_id:
+        type: string
+      settings:
+        $ref: '#/definitions/models.JSONMap'
+      tags:
+        items:
+          type: string
+        type: array
+      visibility:
+        description: public, private, shared
+        type: string
+    required:
+    - name
+    - owner_id
+    type: object
+  service.MountKBRequest:
+    properties:
+      kb_id:
+        type: string
+      mounted_by:
+        type: string
+      organization_id:
+        type: string
+      permissions:
+        $ref: '#/definitions/models.JSONMap'
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    required:
+    - kb_id
+    - mounted_by
+    - tenant_id
+    type: object
+  service.UpdateKBRequest:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      settings:
+        $ref: '#/definitions/models.JSONMap'
+      tags:
+        items:
+          type: string
+        type: array
+      visibility:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@saleschampionhub.com
+    name: 技术支持
+  description: "企业级AI知识库管理平台，支持多租户、RLS数据隔离和向量搜索功能。\n\n## \U0001F510 认证说明\n所有接口都需要JWT
+    Token认证（从子项目0用户中心获取）。\n使用用户中心的 `/api/v1/auth/login` 接口获取Token。\n\n## ✨ 核心特性\n-
+    多租户架构：租户/组织/用户三级隔离\n- Row-Level Security (RLS)：数据库级别的数据隔离\n- 三级挂载系统：租户 > 组织 >
+    用户权限继承\n- 向量搜索：基于pgvector的语义搜索（1024维向量）\n- Redis多层缓存：热点数据缓存优化\n- 完整用户中心集成：统一认证授权"
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: AI知识库管理平台 API
+  version: "1.0"
+paths:
+  /knowledge-bases:
+    get:
+      description: 分页获取知识库列表，支持多种过滤条件
+      parameters:
+      - default: 20
+        description: 每页数量（默认：20）
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: 偏移量（默认：0）
+        in: query
+        name: offset
+        type: integer
+      - default: created_at DESC
+        description: 排序字段（默认：created_at DESC）
+        in: query
+        name: order_by
+        type: string
+      - description: 可见性过滤（public/private/restricted）
+        in: query
+        name: visibility
+        type: string
+      - description: 所有者ID过滤
+        in: query
+        name: owner_id
+        type: string
+      - description: 搜索关键词（在名称和描述中搜索）
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 知识库列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    knowledge_bases:
+                      items:
+                        $ref: '#/definitions/models.KnowledgeBase'
+                      type: array
+                    limit:
+                      type: integer
+                    offset:
+                      type: integer
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 列出知识库
+      tags:
+      - 知识库管理
+    post:
+      consumes:
+      - application/json
+      description: 创建一个新的知识库。如果未指定所有者，将自动设置为当前用户。
+      parameters:
+      - description: 知识库创建请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateKBRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 知识库创建成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    knowledge_base:
+                      $ref: '#/definitions/models.KnowledgeBase'
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建知识库
+      tags:
+      - 知识库管理
+  /knowledge-bases/{id}:
+    delete:
+      description: 软删除知识库，同时会删除所有关联的文档和向量数据
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 知识库删除成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: 知识库ID必填
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 知识库不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除知识库
+      tags:
+      - 知识库管理
+    get:
+      description: 获取指定知识库的详细信息，包括统计数据
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 知识库详情
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    knowledge_base:
+                      $ref: '#/definitions/models.KnowledgeBase'
+                    stats:
+                      type: object
+                  type: object
+              type: object
+        "400":
+          description: 知识库ID必填
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 知识库不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取知识库详情
+      tags:
+      - 知识库管理
+    put:
+      consumes:
+      - application/json
+      description: 更新知识库的名称、描述、设置等信息
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateKBRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 知识库更新成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    knowledge_base:
+                      $ref: '#/definitions/models.KnowledgeBase'
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 知识库不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新知识库
+      tags:
+      - 知识库管理
+  /knowledge-bases/{id}/stats:
+    get:
+      description: 获取知识库的详细统计信息，包括文档数量、总大小、状态分布等
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 知识库统计信息
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    document_count:
+                      type: integer
+                    status_breakdown:
+                      type: object
+                    total_size_bytes:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: 知识库ID必填
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取知识库统计
+      tags:
+      - 知识库管理
+  /mounts/{id}:
+    delete:
+      description: 移除知识库挂载，撤销指定级别的访问权限
+      parameters:
+      - description: 挂载ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 挂载已移除
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: 挂载ID无效
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 挂载不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 取消知识库挂载
+      tags:
+      - 知识库挂载
+  /mounts/organization:
+    post:
+      consumes:
+      - application/json
+      description: 将知识库挂载到组织级别，组织内所有用户都可访问
+      parameters:
+      - description: 挂载请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.MountKBRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 挂载成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    mount:
+                      $ref: '#/definitions/models.KnowledgeBaseMount'
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 挂载知识库到组织
+      tags:
+      - 知识库挂载
+  /mounts/tenant:
+    post:
+      consumes:
+      - application/json
+      description: 将知识库挂载到租户级别，租户内所有用户都可访问
+      parameters:
+      - description: 挂载请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.MountKBRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 挂载成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    mount:
+                      $ref: '#/definitions/models.KnowledgeBaseMount'
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 挂载知识库到租户
+      tags:
+      - 知识库挂载
+  /mounts/user:
+    post:
+      consumes:
+      - application/json
+      description: 将知识库挂载到特定用户，提供个性化访问权限
+      parameters:
+      - description: 挂载请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.MountKBRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 挂载成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    mount:
+                      $ref: '#/definitions/models.KnowledgeBaseMount'
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 挂载知识库到指定用户
+      tags:
+      - 知识库挂载
+  /user/accessible-kbs:
+    get:
+      description: 获取当前用户可访问的所有知识库（基于租户、组织、用户三级挂载）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 可访问的知识库列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    knowledge_bases:
+                      items:
+                        $ref: '#/definitions/models.KnowledgeBase'
+                      type: array
+                    total:
+                      type: integer
+                    user:
+                      type: object
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取可访问的知识库
+      tags:
+      - 用户相关
+securityDefinitions:
+  BearerAuth:
+    description: 输入格式："Bearer " + JWT令牌（注意Bearer后面有空格）
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

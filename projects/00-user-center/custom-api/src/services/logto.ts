@@ -1,0 +1,332 @@
+import axios, { AxiosInstance } from 'axios';
+import logger from '../utils/logger';
+import { User, Organization, Role, Permission } from '../types';
+import { cache, permissionCache } from './redis';
+
+const LOGTO_ENDPOINT = process.env.LOGTO_ENDPOINT || 'http://localhost:3001';
+const LOGTO_ADMIN_ENDPOINT = process.env.LOGTO_ADMIN_ENDPOINT || 'http://localhost:3002';
+
+// Logto Management API客户端
+class LogtoClient {
+  private client: AxiosInstance;
+  private adminToken: string | null = null;
+  private tokenExpiresAt: number = 0;
+
+  constructor() {
+    this.client = axios.create({
+      baseURL: LOGTO_ENDPOINT,
+      timeout: 10000,
+    });
+  }
+
+  // 获取管理员Token（用于调用Management API）
+  private async getAdminToken(): Promise<string> {
+    const now = Date.now();
+
+    // 如果token还有效（剩余5分钟以上），直接返回
+    if (this.adminToken && this.tokenExpiresAt > now + 300000) {
+      return this.adminToken;
+    }
+
+    try {
+      // 这里需要根据实际的Logto配置来获取管理员token
+      // 通常需要使用M2M (Machine to Machine) 应用的凭证
+      const response = await axios.post(`${LOGTO_ENDPOINT}/oidc/token`, {
+        grant_type: 'client_credentials',
+        resource: LOGTO_ENDPOINT,
+        scope: 'all',
+      }, {
+        auth: {
+          username: process.env.LOGTO_M2M_APP_ID || '',
+          password: process.env.LOGTO_M2M_APP_SECRET || '',
+        },
+      });
+
+      this.adminToken = response.data.access_token;
+      this.tokenExpiresAt = now + (response.data.expires_in * 1000);
+
+      return this.adminToken;
+    } catch (error) {
+      logger.error('Failed to get Logto admin token', { error });
+      throw new Error('Failed to authenticate with Logto');
+    }
+  }
+
+  // 验证用户Token
+  async verifyToken(token: string): Promise<{
+    valid: boolean;
+    userId?: string;
+    organizationId?: string;
+    error?: string;
+  }> {
+    try {
+      // 使用Logto的introspection端点验证token
+      const response = await axios.post(
+        `${LOGTO_ENDPOINT}/oidc/token/introspection`,
+        new URLSearchParams({
+          token,
+          token_type_hint: 'access_token',
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          auth: {
+            username: process.env.LOGTO_APP_ID || '',
+            password: process.env.LOGTO_APP_SECRET || '',
+          },
+        }
+      );
+
+      if (!response.data.active) {
+        return { valid: false, error: 'Token is not active' };
+      }
+
+      return {
+        valid: true,
+        userId: response.data.sub,
+        organizationId: response.data.organization_id,
+      };
+    } catch (error) {
+      logger.error('Token verification failed', { error });
+      return { valid: false, error: 'Token verification failed' };
+    }
+  }
+
+  // 获取用户信息
+  async getUser(userId: string): Promise<User | null> {
+    try {
+      const cacheKey = `user:${userId}`;
+      const cached = await cache.get<User>(cacheKey);
+      if (cached) return cached;
+
+      const token = await this.getAdminToken();
+      const response = await axios.get(`${LOGTO_ENDPOINT}/api/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const user: User = {
+        id: response.data.id,
+        username: response.data.username,
+        email: response.data.primaryEmail,
+        phone: response.data.primaryPhone,
+        name: response.data.name,
+        avatar: response.data.avatar,
+        createdAt: new Date(response.data.createdAt),
+        updatedAt: new Date(response.data.updatedAt || response.data.createdAt),
+        isSuspended: response.data.isSuspended || false,
+      };
+
+      await cache.set(cacheKey, user, 300); // 缓存5分钟
+      return user;
+    } catch (error) {
+      logger.error('Failed to get user', { userId, error });
+      return null;
+    }
+  }
+
+  // 获取组织信息
+  async getOrganization(organizationId: string): Promise<Organization | null> {
+    try {
+      const cacheKey = `org:${organizationId}`;
+      const cached = await cache.get<Organization>(cacheKey);
+      if (cached) return cached;
+
+      const token = await this.getAdminToken();
+      const response = await axios.get(`${LOGTO_ENDPOINT}/api/organizations/${organizationId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const org: Organization = {
+        id: response.data.id,
+        name: response.data.name,
+        description: response.data.description,
+        customData: response.data.customData,
+        createdAt: new Date(response.data.createdAt),
+        isSuspended: response.data.isSuspended || false,
+      };
+
+      await cache.set(cacheKey, org, 300); // 缓存5分钟
+      return org;
+    } catch (error) {
+      logger.error('Failed to get organization', { organizationId, error });
+      return null;
+    }
+  }
+
+  // 获取用户在组织中的角色
+  async getUserRoles(userId: string, organizationId: string): Promise<Role[]> {
+    try {
+      const cacheKey = `roles:${userId}:${organizationId}`;
+      const cached = await cache.get<Role[]>(cacheKey);
+      if (cached) return cached;
+
+      const token = await this.getAdminToken();
+      const response = await axios.get(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users/${userId}/roles`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const roles: Role[] = response.data.map((role: any) => ({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+      }));
+
+      await cache.set(cacheKey, roles, 300); // 缓存5分钟
+      return roles;
+    } catch (error) {
+      logger.error('Failed to get user roles', { userId, organizationId, error });
+      return [];
+    }
+  }
+
+  // 获取用户权限
+  async getUserPermissions(userId: string, organizationId: string): Promise<Permission[]> {
+    try {
+      // 先检查缓存
+      const cached = await permissionCache.get(userId, organizationId);
+      if (cached) return cached;
+
+      // 获取用户角色
+      const roles = await this.getUserRoles(userId, organizationId);
+
+      // 获取每个角色的权限
+      const token = await this.getAdminToken();
+      const allPermissions: Permission[] = [];
+
+      for (const role of roles) {
+        try {
+          const response = await axios.get(
+            `${LOGTO_ENDPOINT}/api/roles/${role.id}/scopes`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+
+          // 将scopes转换为Permission格式
+          const permissions = response.data.map((scope: any) => {
+            const [resource, action] = scope.name.split(':');
+            return { resource, action };
+          });
+
+          allPermissions.push(...permissions);
+        } catch (error) {
+          logger.error('Failed to get role permissions', { roleId: role.id, error });
+        }
+      }
+
+      // 去重
+      const uniquePermissions = allPermissions.filter(
+        (perm, index, self) =>
+          index ===
+          self.findIndex((p) => p.resource === perm.resource && p.action === perm.action)
+      );
+
+      // 缓存权限
+      await permissionCache.set(userId, organizationId, uniquePermissions);
+
+      return uniquePermissions;
+    } catch (error) {
+      logger.error('Failed to get user permissions', { userId, organizationId, error });
+      return [];
+    }
+  }
+
+  // 检查用户是否有特定权限
+  async checkPermission(
+    userId: string,
+    organizationId: string,
+    resource: string,
+    action: string
+  ): Promise<boolean> {
+    try {
+      const permissions = await this.getUserPermissions(userId, organizationId);
+
+      return permissions.some(
+        (perm) =>
+          perm.resource === resource &&
+          (perm.action === action || perm.action === '*' || perm.action === 'all')
+      );
+    } catch (error) {
+      logger.error('Permission check failed', { userId, organizationId, resource, action, error });
+      return false;
+    }
+  }
+
+  // 创建组织
+  async createOrganization(name: string, description?: string): Promise<Organization> {
+    try {
+      const token = await this.getAdminToken();
+      const response = await axios.post(
+        `${LOGTO_ENDPOINT}/api/organizations`,
+        { name, description },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      return {
+        id: response.data.id,
+        name: response.data.name,
+        description: response.data.description,
+        customData: response.data.customData,
+        createdAt: new Date(response.data.createdAt),
+        isSuspended: false,
+      };
+    } catch (error) {
+      logger.error('Failed to create organization', { name, error });
+      throw error;
+    }
+  }
+
+  // 将用户添加到组织
+  async addUserToOrganization(userId: string, organizationId: string): Promise<void> {
+    try {
+      const token = await this.getAdminToken();
+      await axios.post(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users`,
+        { userIds: [userId] },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      // 清除缓存
+      await permissionCache.clear(userId, organizationId);
+    } catch (error) {
+      logger.error('Failed to add user to organization', { userId, organizationId, error });
+      throw error;
+    }
+  }
+
+  // 为用户分配角色
+  async assignRoleToUser(
+    userId: string,
+    organizationId: string,
+    roleId: string
+  ): Promise<void> {
+    try {
+      const token = await this.getAdminToken();
+      await axios.post(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users/${userId}/roles`,
+        { organizationRoleIds: [roleId] },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      // 清除缓存
+      await permissionCache.clear(userId, organizationId);
+      await cache.del(`roles:${userId}:${organizationId}`);
+    } catch (error) {
+      logger.error('Failed to assign role to user', { userId, organizationId, roleId, error });
+      throw error;
+    }
+  }
+}
+
+export const logtoClient = new LogtoClient();
+export default logtoClient;

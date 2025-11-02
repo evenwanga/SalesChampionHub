@@ -1,0 +1,32 @@
+# 环境配置
+.env
+.env.local
+.env.*.local
+
+# 备份文件
+backups/
+
+# 日志
+logs/
+*.log
+
+# 数据库数据（由Docker volume管理）
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 临时文件
+*.tmp
+*.bak
+.temp/
+
+# Node modules（由custom-api自己管理）
+custom-api/node_modules/
+custom-api/dist/
+custom-api/package-lock.json
