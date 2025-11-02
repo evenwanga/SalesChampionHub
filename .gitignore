@@ -165,3 +165,6 @@ infrastructure/monitoring/data/
 .terraform/
 *.tfstate
 *.tfstate.backup
+
+# Docker持久化数据目录
+docker_data/

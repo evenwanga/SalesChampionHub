@@ -1,43 +1,11 @@
 version: '3.8'
 
+# ==========================================
+# 子项目1: AI知识库管理平台
+# 使用共享基础设施层 (../infrastructure)
+# ==========================================
+
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: kb-postgres
-    environment:
-      POSTGRES_DB: knowledge_platform
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-kb_admin_pass_2024}
-      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
-    ports:
-      - "5434:5432"  # Use 5434 to avoid conflict with sub-project 0
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations/init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d knowledge_platform"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - kb_network
-
-  redis:
-    image: redis:7-alpine
-    container_name: kb-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-kb_redis_pass_2024}
-    ports:
-      - "6381:6379"  # Use 6381 to avoid conflict
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-kb_redis_pass_2024}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - kb_network
-
   api-server:
     build:
       context: .
@@ -46,36 +14,49 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=postgres
+      # 数据库连接（使用共享 PostgreSQL）
+      - DB_HOST=saleschampion-postgres
       - DB_PORT=5432
       - DB_NAME=knowledge_platform
-      - DB_USER=admin
-      - DB_PASSWORD=${DB_PASSWORD:-kb_admin_pass_2024}
-      - REDIS_HOST=redis
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-SalesChampion_PG_2024}
+      - DB_SSLMODE=disable
+
+      # Redis连接（使用共享 Redis DB 1）
+      - REDIS_HOST=saleschampion-redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-kb_redis_pass_2024}
-      - USER_CENTER_API_BASE_URL=${USER_CENTER_API:-http://host.docker.internal:3003}
-      - USER_CENTER_API_KEY=${USER_CENTER_API_KEY:-your-api-key-here}
-      - USER_CENTER_TIMEOUT=30s
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-SalesChampion_Redis_2024}
+      - REDIS_DB=1
+
+      # 用户中心连接（通过Kong访问）
+      - USER_CENTER_API=${USER_CENTER_API:-http://kong-gateway:8000/api}
+      - USER_CENTER_API_KEY=${USER_CENTER_API_KEY}
+      - USER_CENTER_TIMEOUT=30
+
+      # 服务配置
       - SERVER_PORT=8080
       - SERVER_MODE=${SERVER_MODE:-debug}
-      - FEATURE_CACHE_TTL=5m
-      - QUERY_MAX_KB_QUERY_LIMIT=4
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - kb_network
-    restart: unless-stopped
+      - SERVER_READ_TIMEOUT=30
+      - SERVER_WRITE_TIMEOUT=30
 
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
+      # 功能开关
+      - ENABLE_AUDIT_LOG=true
+      - ENABLE_CACHE=true
+      - CACHE_TTL_SECONDS=300
+
+      # 查询限制
+      - MAX_KB_QUERY_LIMIT=4
+    networks:
+      - saleschampion_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
-  kb_network:
-    driver: bridge
+  saleschampion_network:
+    external: true
+    name: infrastructure_saleschampion_network

@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # 共享 PostgreSQL 数据库
+  # ==========================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: saleschampion-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SalesChampion_PG_2024}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - ../docker_data/postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - saleschampion_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=300"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+
+  # ==========================================
+  # 共享 Redis 缓存
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: saleschampion-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-SalesChampion_Redis_2024}
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --databases 16
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - ../docker_data/redis:/data
+    networks:
+      - saleschampion_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Kong 数据库迁移
+  # ==========================================
+  kong-migrations:
+    image: kong:3.5
+    container_name: kong-migrations
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
+      KONG_PG_USER: ${POSTGRES_USER:-postgres}
+      KONG_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      KONG_PG_DATABASE: kong
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saleschampion_network
+    restart: on-failure
+
+  # ==========================================
+  # Kong API Gateway
+  # ==========================================
+  kong:
+    image: kong:3.5
+    container_name: kong-gateway
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
+      KONG_PG_USER: ${POSTGRES_USER:-postgres}
+      KONG_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      KONG_PG_DATABASE: kong
+
+      # 日志配置
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_LOG_LEVEL: info
+
+      # 监听端口配置
+      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+
+      # 声明式配置
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+
+      # 性能优化
+      KONG_NGINX_WORKER_PROCESSES: auto
+      KONG_NGINX_HTTP_KEEPALIVE_TIMEOUT: 65s
+    ports:
+      - "80:8000"       # HTTP 代理入口
+      - "443:8443"      # HTTPS 代理入口
+      - "8001:8001"     # Admin API
+      - "8444:8444"     # Admin API SSL
+    volumes:
+      - ./kong:/kong/declarative:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kong-migrations:
+        condition: service_completed_successfully
+    networks:
+      - saleschampion_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ==========================================
+  # Kong Deck (配置管理工具)
+  # ==========================================
+  kong-deck:
+    image: kong/deck:latest
+    container_name: kong-deck
+    volumes:
+      - ./kong:/workspace
+    environment:
+      DECK_KONG_ADDR: http://kong:8001
+    networks:
+      - saleschampion_network
+    entrypoint: ["tail", "-f", "/dev/null"]  # 保持运行用于执行命令
+    depends_on:
+      kong:
+        condition: service_healthy
+
+# 注意: 持久化数据存储在 ../docker_data/ 目录
+# volumes 配置已移除，改用本地目录映射
+
+networks:
+  saleschampion_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.25.0.0/16}
