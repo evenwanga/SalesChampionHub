@@ -62,8 +62,8 @@ type VerifyTokenRequest struct {
 
 // VerifyTokenResponse is the response from token verification
 type VerifyTokenResponse struct {
-	Valid bool  `json:"valid"`
-	User  *User `json:"user,omitempty"`
+	Valid bool   `json:"valid"`
+	User  *User  `json:"user,omitempty"`
 	Error string `json:"error,omitempty"`
 }
 
@@ -185,13 +185,13 @@ func (c *Client) SendAuditLog(ctx context.Context, log AuditLog) error {
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	TenantID  string                 `json:"tenant_id"`
-	UserID    string                 `json:"user_id"`
-	Action    string                 `json:"action"`
-	Resource  string                 `json:"resource"`
-	ResourceID string                `json:"resource_id"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-	Timestamp time.Time              `json:"timestamp"`
+	TenantID   string                 `json:"tenant_id"`
+	UserID     string                 `json:"user_id"`
+	Action     string                 `json:"action"`
+	Resource   string                 `json:"resource"`
+	ResourceID string                 `json:"resource_id"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Timestamp  time.Time              `json:"timestamp"`
 }
 
 // doRequest performs an HTTP request to the User Center API

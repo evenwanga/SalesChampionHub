@@ -53,9 +53,9 @@ type ServerConfig struct {
 
 // LogtoConfig holds Logto OIDC settings
 type LogtoConfig struct {
-	Endpoint   string
-	AppID      string
-	AppSecret  string
+	Endpoint    string
+	AppID       string
+	AppSecret   string
 	APIResource string
 }
 

@@ -251,18 +251,18 @@ func (r *VectorRepository) CountVectorsByKB(ctx context.Context, kbID string) (i
 
 // SearchResult represents a search result with metadata
 type SearchResult struct {
-	ID           string  `json:"id"`
-	ChunkID      string  `json:"chunk_id"`
-	KBID         string  `json:"kb_id"`
-	Content      string  `json:"content"`
-	ChunkIndex   int     `json:"chunk_index"`
-	DocumentID   string  `json:"document_id"`
-	Filename     string  `json:"filename"`
-	FileType     string  `json:"file_type"`
-	Distance     float64 `json:"distance"`     // Cosine distance (0 = identical, 2 = opposite)
-	Similarity   float64 `json:"similarity"`   // Converted to similarity score (0-1)
-	VectorDist   float64 `json:"vector_distance,omitempty"`
-	TextBoost    float64 `json:"text_boost,omitempty"`
+	ID         string  `json:"id"`
+	ChunkID    string  `json:"chunk_id"`
+	KBID       string  `json:"kb_id"`
+	Content    string  `json:"content"`
+	ChunkIndex int     `json:"chunk_index"`
+	DocumentID string  `json:"document_id"`
+	Filename   string  `json:"filename"`
+	FileType   string  `json:"file_type"`
+	Distance   float64 `json:"distance"`   // Cosine distance (0 = identical, 2 = opposite)
+	Similarity float64 `json:"similarity"` // Converted to similarity score (0-1)
+	VectorDist float64 `json:"vector_distance,omitempty"`
+	TextBoost  float64 `json:"text_boost,omitempty"`
 }
 
 // CalculateSimilarity converts distance to similarity score

@@ -10,9 +10,9 @@ import (
 
 // ErrorResponse represents a standardized error response
 type ErrorResponse struct {
-	Success bool       `json:"success"`
+	Success bool        `json:"success"`
 	Error   ErrorDetail `json:"error"`
-	Meta    MetaInfo   `json:"meta"`
+	Meta    MetaInfo    `json:"meta"`
 }
 
 // ErrorDetail contains error information
@@ -181,15 +181,15 @@ func randomString(length int) string {
 
 // Common error codes
 const (
-	ErrUnauthorized      = "UNAUTHORIZED"
-	ErrForbidden         = "FORBIDDEN"
-	ErrNotFound          = "NOT_FOUND"
-	ErrBadRequest        = "BAD_REQUEST"
-	ErrInternalError     = "INTERNAL_ERROR"
-	ErrValidationFailed  = "VALIDATION_FAILED"
-	ErrDatabaseError     = "DATABASE_ERROR"
-	ErrCacheError        = "CACHE_ERROR"
-	ErrExternalAPIError  = "EXTERNAL_API_ERROR"
+	ErrUnauthorized     = "UNAUTHORIZED"
+	ErrForbidden        = "FORBIDDEN"
+	ErrNotFound         = "NOT_FOUND"
+	ErrBadRequest       = "BAD_REQUEST"
+	ErrInternalError    = "INTERNAL_ERROR"
+	ErrValidationFailed = "VALIDATION_FAILED"
+	ErrDatabaseError    = "DATABASE_ERROR"
+	ErrCacheError       = "CACHE_ERROR"
+	ErrExternalAPIError = "EXTERNAL_API_ERROR"
 )
 
 // Helper functions for common error responses

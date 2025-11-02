@@ -123,15 +123,20 @@ func main() {
 	kbRepo := repository.NewKBRepository(db)
 	mountRepo := repository.NewMountRepository(db)
 	docRepo := repository.NewDocumentRepository(db)
+	vectorRepo := repository.NewVectorRepository(db)
+	queryLogRepo := repository.NewQueryLogRepository(db)
 
 	// Initialize cache
 	kbCache := kbcache.NewKBCache(redisClient)
 
 	// Initialize services
 	kbService := service.NewKBService(kbRepo, mountRepo, docRepo, kbCache, cfg.Query.MaxKBQueryLimit)
+	searchService := service.NewSearchService(vectorRepo, queryLogRepo, cfg.Query.MaxKBQueryLimit)
+	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, 8000) // 8000 chars max context
 
 	// Initialize handlers
 	kbHandler := handler.NewKBHandler(kbService)
+	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService)
 
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -192,6 +197,21 @@ func main() {
 
 			// User accessible KBs
 			authenticated.GET("/user/accessible-kbs", kbHandler.GetAccessibleKBs)
+
+			// Search endpoints
+			search := authenticated.Group("/search")
+			{
+				search.POST("", searchHandler.Search)
+			}
+
+			// RAG endpoints
+			rag := authenticated.Group("/ask")
+			{
+				rag.POST("", searchHandler.Ask)
+			}
+
+			// Query history
+			authenticated.GET("/query-history", searchHandler.GetQueryHistory)
 		}
 	}
 

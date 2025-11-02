@@ -8,19 +8,19 @@ import (
 
 // KnowledgeBase represents a knowledge base (global resource)
 type KnowledgeBase struct {
-	ID              string    `json:"id" gorm:"primaryKey"`
-	Name            string    `json:"name" gorm:"not null"`
-	Description     string    `json:"description"`
-	OwnerID         string    `json:"owner_id" gorm:"not null"` // From sub-project 0
-	Visibility      string    `json:"visibility" gorm:"default:'private'"` // public, private, shared
-	Tags            []string  `json:"tags" gorm:"type:text[]"`
-	DocumentCount   int       `json:"document_count" gorm:"default:0"`
-	TotalSizeBytes  int64     `json:"total_size_bytes" gorm:"default:0"`
-	LastUpdatedAt   time.Time `json:"last_updated_at"`
-	Settings        JSONMap   `json:"settings" gorm:"type:jsonb;default:'{}'"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	DeletedAt       *time.Time `json:"deleted_at,omitempty" gorm:"index"`
+	ID             string     `json:"id" gorm:"primaryKey"`
+	Name           string     `json:"name" gorm:"not null"`
+	Description    string     `json:"description"`
+	OwnerID        string     `json:"owner_id" gorm:"not null"`            // From sub-project 0
+	Visibility     string     `json:"visibility" gorm:"default:'private'"` // public, private, shared
+	Tags           []string   `json:"tags" gorm:"type:text[]"`
+	DocumentCount  int        `json:"document_count" gorm:"default:0"`
+	TotalSizeBytes int64      `json:"total_size_bytes" gorm:"default:0"`
+	LastUpdatedAt  time.Time  `json:"last_updated_at"`
+	Settings       JSONMap    `json:"settings" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 // KnowledgeBaseMount represents three-level mounting (v3.1)
@@ -42,22 +42,22 @@ type KnowledgeBaseMount struct {
 
 // Document represents a document in a knowledge base
 type Document struct {
-	ID           string     `json:"id" gorm:"primaryKey"`
-	KBID         string     `json:"kb_id" gorm:"not null;index"`
-	Filename     string     `json:"filename" gorm:"not null"`
-	FileType     string     `json:"file_type" gorm:"not null"`
-	FileSize     int64      `json:"file_size" gorm:"not null"`
-	FilePath     string     `json:"file_path" gorm:"not null"`
-	Status       string     `json:"status" gorm:"default:'pending'"` // pending, processing, completed, failed
-	Content      string     `json:"content,omitempty" gorm:"type:text"`
-	ContentHash  string     `json:"content_hash,omitempty" gorm:"index"`
-	Metadata     JSONMap    `json:"metadata" gorm:"type:jsonb;default:'{}'"`
-	ChunkCount   int        `json:"chunk_count" gorm:"default:0"`
-	UploadedBy   string     `json:"uploaded_by" gorm:"not null"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	ProcessedAt  *time.Time `json:"processed_at,omitempty"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty" gorm:"index"`
+	ID          string     `json:"id" gorm:"primaryKey"`
+	KBID        string     `json:"kb_id" gorm:"not null;index"`
+	Filename    string     `json:"filename" gorm:"not null"`
+	FileType    string     `json:"file_type" gorm:"not null"`
+	FileSize    int64      `json:"file_size" gorm:"not null"`
+	FilePath    string     `json:"file_path" gorm:"not null"`
+	Status      string     `json:"status" gorm:"default:'pending'"` // pending, processing, completed, failed
+	Content     string     `json:"content,omitempty" gorm:"type:text"`
+	ContentHash string     `json:"content_hash,omitempty" gorm:"index"`
+	Metadata    JSONMap    `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	ChunkCount  int        `json:"chunk_count" gorm:"default:0"`
+	UploadedBy  string     `json:"uploaded_by" gorm:"not null"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty" gorm:"index"`
 
 	// Relations
 	KnowledgeBase *KnowledgeBase `json:"knowledge_base,omitempty" gorm:"foreignKey:KBID"`

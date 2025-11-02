@@ -18,11 +18,11 @@ var (
 
 const (
 	// Cache key prefixes
-	kbMetadataPrefix     = "kb:metadata:"
-	kbAccessiblePrefix   = "kb:accessible:"
-	kbPermissionsPrefix  = "kb:permissions:"
-	documentMetaPrefix   = "doc:metadata:"
-	kbStatsPrefix        = "kb:stats:"
+	kbMetadataPrefix    = "kb:metadata:"
+	kbAccessiblePrefix  = "kb:accessible:"
+	kbPermissionsPrefix = "kb:permissions:"
+	documentMetaPrefix  = "doc:metadata:"
+	kbStatsPrefix       = "kb:stats:"
 
 	// Default TTLs
 	kbMetadataTTL    = 5 * time.Minute

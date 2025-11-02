@@ -1,5 +1,9 @@
 basePath: /api/v1
 definitions:
+  handler.AskRequestBody:
+    type: object
+  handler.SearchRequestBody:
+    type: object
   middleware.ErrorDetail:
     properties:
       code:
@@ -97,6 +101,79 @@ definitions:
       user_id:
         type: string
     type: object
+  models.QueryLog:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      kb_ids:
+        items:
+          type: string
+        type: array
+      latency_ms:
+        type: integer
+      metadata:
+        $ref: '#/definitions/models.JSONMap'
+      query_text:
+        type: string
+      result_count:
+        type: integer
+      tenant_id:
+        type: string
+      top_kb_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  repository.SearchResult:
+    properties:
+      chunk_id:
+        type: string
+      chunk_index:
+        type: integer
+      content:
+        type: string
+      distance:
+        description: Cosine distance (0 = identical, 2 = opposite)
+        type: number
+      document_id:
+        type: string
+      file_type:
+        type: string
+      filename:
+        type: string
+      id:
+        type: string
+      kb_id:
+        type: string
+      similarity:
+        description: Converted to similarity score (0-1)
+        type: number
+      text_boost:
+        type: number
+      vector_distance:
+        type: number
+    type: object
+  service.AskResponse:
+    properties:
+      answer:
+        type: string
+      confidence:
+        description: 0-1 confidence score
+        type: number
+      context:
+        description: 'Optional: return context used'
+        type: string
+      kbs_searched:
+        type: integer
+      latency_ms:
+        type: integer
+      sources:
+        items:
+          $ref: '#/definitions/service.Source'
+        type: array
+    type: object
   service.CreateKBRequest:
     properties:
       description:
@@ -137,6 +214,36 @@ definitions:
     - mounted_by
     - tenant_id
     type: object
+  service.SearchResponse:
+    properties:
+      kbs_searched:
+        type: integer
+      latency_ms:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/repository.SearchResult'
+        type: array
+      total_count:
+        type: integer
+    type: object
+  service.Source:
+    properties:
+      chunk_id:
+        type: string
+      chunk_index:
+        type: integer
+      content_snippet:
+        type: string
+      document_id:
+        type: string
+      filename:
+        type: string
+      kb_id:
+        type: string
+      similarity:
+        type: number
+    type: object
   service.UpdateKBRequest:
     properties:
       description:
@@ -167,6 +274,51 @@ info:
   title: AI知识库管理平台 API
   version: "1.0"
 paths:
+  /ask:
+    post:
+      consumes:
+      - application/json
+      description: 基于知识库内容回答问题，使用检索增强生成(RAG)技术
+      parameters:
+      - description: 问答请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AskRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 回答成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.AskResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "403":
+          description: 无权访问指定知识库
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: RAG 问答
+      tags:
+      - RAG
   /knowledge-bases:
     get:
       description: 分页获取知识库列表，支持多种过滤条件
@@ -642,6 +794,101 @@ paths:
       summary: 挂载知识库到指定用户
       tags:
       - 知识库挂载
+  /query-history:
+    get:
+      description: 获取当前用户的查询历史记录，包括搜索和RAG问答
+      parameters:
+      - default: 20
+        description: 每页数量（默认：20）
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: 偏移量（默认：0）
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询历史
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    limit:
+                      type: integer
+                    offset:
+                      type: integer
+                    queries:
+                      items:
+                        $ref: '#/definitions/models.QueryLog'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取查询历史
+      tags:
+      - 查询历史
+  /search:
+    post:
+      consumes:
+      - application/json
+      description: 在指定的知识库中进行语义搜索或混合搜索，返回最相关的文档片段
+      parameters:
+      - description: 搜索请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SearchRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 搜索成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.SearchResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 搜索知识库
+      tags:
+      - 搜索
   /user/accessible-kbs:
     get:
       description: 获取当前用户可访问的所有知识库（基于租户、组织、用户三级挂载）

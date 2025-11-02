@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrUnauthorized      = errors.New("unauthorized access")
-	ErrPermissionDenied  = errors.New("permission denied")
-	ErrKBLimitExceeded   = errors.New("knowledge base limit exceeded")
-	ErrInvalidInput      = errors.New("invalid input")
+	ErrUnauthorized     = errors.New("unauthorized access")
+	ErrPermissionDenied = errors.New("permission denied")
+	ErrKBLimitExceeded  = errors.New("knowledge base limit exceeded")
+	ErrInvalidInput     = errors.New("invalid input")
 )
 
 // KBService provides business logic for knowledge base operations
