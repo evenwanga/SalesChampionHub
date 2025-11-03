@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/ledongthuc/pdf"
+	"github.com/xuri/excelize/v2"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -39,6 +41,10 @@ func (p *DocumentParser) ParseFile(filePath string) (string, error) {
 		return p.parsePDF(filePath)
 	case ".html", ".htm":
 		return p.parseHTML(filePath)
+	case ".xlsx", ".xls":
+		return p.parseExcel(filePath)
+	case ".pptx", ".ppt":
+		return p.parsePowerPoint(filePath)
 	case ".doc", ".docx":
 		// For now, return placeholder - would need actual Word parser library
 		return p.parseWordPlaceholder(filePath)
@@ -98,22 +104,124 @@ func (p *DocumentParser) parsePDF(filePath string) (string, error) {
 	return content.String(), nil
 }
 
-// parseHTML extracts text from HTML files (basic implementation)
+// parseHTML extracts text from HTML files using proper HTML parser
 func (p *DocumentParser) parseHTML(filePath string) (string, error) {
-	content, err := os.ReadFile(filePath)
+	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
+	defer file.Close()
 
-	// Basic HTML tag removal (for production, use proper HTML parser like golang.org/x/net/html)
-	text := string(content)
-	text = removeHTMLTags(text)
-
-	if len(text) > p.maxContentLength {
-		text = text[:p.maxContentLength]
+	doc, err := html.Parse(file)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to parse HTML: %v", ErrParsingFailed, err)
 	}
 
-	return text, nil
+	var text strings.Builder
+	var extractText func(*html.Node)
+	extractText = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			// Skip script and style content
+			if n.Parent != nil && (n.Parent.Data == "script" || n.Parent.Data == "style") {
+				return
+			}
+			text.WriteString(n.Data)
+			text.WriteString(" ")
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if text.Len() > p.maxContentLength {
+				return
+			}
+			extractText(c)
+		}
+	}
+
+	extractText(doc)
+	result := text.String()
+
+	// Clean up whitespace
+	result = strings.Join(strings.Fields(result), " ")
+
+	if len(result) > p.maxContentLength {
+		result = result[:p.maxContentLength]
+	}
+
+	return result, nil
+}
+
+// parseExcel extracts text from Excel files (.xlsx, .xls)
+func (p *DocumentParser) parseExcel(filePath string) (string, error) {
+	f, err := excelize.OpenFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to open Excel file: %v", ErrParsingFailed, err)
+	}
+	defer f.Close()
+
+	var content strings.Builder
+
+	// Get all sheet names
+	sheets := f.GetSheetList()
+
+	for _, sheetName := range sheets {
+		content.WriteString(fmt.Sprintf("\n[Sheet: %s]\n", sheetName))
+
+		// Get all rows
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			continue
+		}
+
+		for rowIdx, row := range rows {
+			if content.Len() > p.maxContentLength {
+				break
+			}
+
+			// Format row data
+			var rowData []string
+			for _, cell := range row {
+				if cell != "" {
+					rowData = append(rowData, cell)
+				}
+			}
+
+			if len(rowData) > 0 {
+				content.WriteString(fmt.Sprintf("Row %d: %s\n", rowIdx+1, strings.Join(rowData, " | ")))
+			}
+		}
+
+		if content.Len() > p.maxContentLength {
+			break
+		}
+	}
+
+	result := content.String()
+	if len(result) > p.maxContentLength {
+		result = result[:p.maxContentLength]
+	}
+
+	return result, nil
+}
+
+// parsePowerPoint extracts text from PowerPoint files (.pptx)
+// Note: Basic implementation - extracts text but not presenter notes or detailed formatting
+func (p *DocumentParser) parsePowerPoint(filePath string) (string, error) {
+	// PowerPoint parsing is complex and requires unioffice or similar library
+	// For .pptx files (which are ZIP archives), we could extract XML and parse
+	// For now, returning a placeholder that indicates manual processing needed
+
+	// Check if it's a .pptx file (Office Open XML format)
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == ".pptx" {
+		// .pptx files are ZIP archives containing XML files
+		// This is a simplified implementation
+		return fmt.Sprintf("[PowerPoint file: %s - Content extraction requires unioffice library. "+
+			"To fully support .pptx parsing, integrate github.com/unidoc/unioffice package.]",
+			filepath.Base(filePath)), nil
+	}
+
+	// .ppt files (binary format) are even more complex
+	return fmt.Sprintf("[PowerPoint file: %s - Binary .ppt format requires specialized library]",
+		filepath.Base(filePath)), nil
 }
 
 // parseWordPlaceholder is a placeholder for Word document parsing

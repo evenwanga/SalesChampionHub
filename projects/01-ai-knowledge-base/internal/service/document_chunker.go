@@ -19,7 +19,7 @@ func NewDocumentChunker(chunkSize, overlapSize int) *DocumentChunker {
 	}
 }
 
-// ChunkText splits text into overlapping chunks
+// ChunkText splits text into overlapping chunks with intelligent paragraph boundary detection
 func (c *DocumentChunker) ChunkText(text string) []string {
 	if text == "" {
 		return []string{}
@@ -36,6 +36,13 @@ func (c *DocumentChunker) ChunkText(text string) []string {
 		return []string{text}
 	}
 
+	// Try paragraph-based chunking first for better semantic coherence
+	paragraphChunks := c.chunkByParagraphs(text)
+	if len(paragraphChunks) > 0 && c.validateChunks(paragraphChunks) {
+		return paragraphChunks
+	}
+
+	// Fall back to standard overlapping chunking
 	var chunks []string
 	runes := []rune(text)
 	start := 0
@@ -71,6 +78,119 @@ func (c *DocumentChunker) ChunkText(text string) []string {
 	}
 
 	return chunks
+}
+
+// chunkByParagraphs attempts to chunk text based on paragraph boundaries
+func (c *DocumentChunker) chunkByParagraphs(text string) []string {
+	// Split by double newlines (paragraph boundaries)
+	paragraphs := strings.Split(text, "\n\n")
+	if len(paragraphs) <= 1 {
+		return nil // Not enough paragraphs, use standard chunking
+	}
+
+	var chunks []string
+	var currentChunk strings.Builder
+	var currentLen int
+
+	for _, para := range paragraphs {
+		para = strings.TrimSpace(para)
+		if para == "" {
+			continue
+		}
+
+		paraLen := utf8.RuneCountInString(para)
+
+		// If single paragraph exceeds chunk size, split it
+		if paraLen > c.chunkSize {
+			// Flush current chunk if not empty
+			if currentChunk.Len() > 0 {
+				chunks = append(chunks, currentChunk.String())
+				currentChunk.Reset()
+				currentLen = 0
+			}
+			// Split oversized paragraph
+			subChunks := c.splitOversizedParagraph(para)
+			chunks = append(chunks, subChunks...)
+			continue
+		}
+
+		// Try to add paragraph to current chunk
+		if currentLen+paraLen+2 <= c.chunkSize {
+			// Add to current chunk
+			if currentChunk.Len() > 0 {
+				currentChunk.WriteString("\n\n")
+				currentLen += 2
+			}
+			currentChunk.WriteString(para)
+			currentLen += paraLen
+		} else {
+			// Current chunk is full, start new chunk
+			if currentChunk.Len() > 0 {
+				chunks = append(chunks, currentChunk.String())
+			}
+			currentChunk.Reset()
+			currentChunk.WriteString(para)
+			currentLen = paraLen
+		}
+	}
+
+	// Add remaining chunk
+	if currentChunk.Len() > 0 {
+		chunks = append(chunks, currentChunk.String())
+	}
+
+	return chunks
+}
+
+// splitOversizedParagraph splits a paragraph that exceeds chunk size
+func (c *DocumentChunker) splitOversizedParagraph(para string) []string {
+	var chunks []string
+	runes := []rune(para)
+	start := 0
+
+	for start < len(runes) {
+		end := start + c.chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+
+		// Find sentence boundary
+		if end < len(runes) {
+			end = c.findBreakPoint(runes, start, end)
+		}
+
+		chunk := string(runes[start:end])
+		chunk = strings.TrimSpace(chunk)
+		if chunk != "" {
+			chunks = append(chunks, chunk)
+		}
+
+		// Move with smaller overlap for paragraph splits
+		start = end - (c.overlapSize / 2)
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	return chunks
+}
+
+// validateChunks checks if paragraph-based chunks are reasonable
+func (c *DocumentChunker) validateChunks(chunks []string) bool {
+	if len(chunks) == 0 {
+		return false
+	}
+
+	// Check if chunks are reasonably sized
+	for _, chunk := range chunks {
+		chunkLen := utf8.RuneCountInString(chunk)
+		// Allow some variance (50% smaller is OK, but not too small)
+		if chunkLen < c.chunkSize/4 && len(chunks) > 1 {
+			return false // Chunks are too small, use standard chunking
+		}
+	}
+
+	return true
 }
 
 // findBreakPoint finds a good place to break the text (sentence or paragraph boundary)

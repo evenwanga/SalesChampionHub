@@ -178,13 +178,13 @@ func main() {
 
 	// Initialize services
 	kbService := service.NewKBService(kbRepo, mountRepo, docRepo, kbCache, cfg.Query.MaxKBQueryLimit)
-	searchService := service.NewSearchService(vectorRepo, queryLogRepo, cfg.Query.MaxKBQueryLimit)
+	searchService := service.NewSearchService(vectorRepo, queryLogRepo, redisClient, cfg.Query.MaxKBQueryLimit, cfg.Features.CacheTTL)
 	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, llmClient, 8000) // 8000 chars max context
 	docService := service.NewDocumentService(docRepo, kbService, docProcessor, "./uploads", 100*1024*1024, 1000, 200) // 100MB max, 1000 char chunks, 200 char overlap
 
 	// Initialize handlers
 	kbHandler := handler.NewKBHandler(kbService)
-	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService)
+	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService, queryLogRepo)
 	docHandler := handler.NewDocumentHandler(docService)
 
 	// Swagger documentation
@@ -254,6 +254,8 @@ func main() {
 				docs.GET("", docHandler.ListDocuments)
 				docs.GET("/:id", docHandler.GetDocument)
 				docs.DELETE("/:id", docHandler.DeleteDocument)
+				docs.PUT("/:id/status", docHandler.UpdateDocumentStatus)
+				docs.POST("/batch-delete", docHandler.BatchDeleteDocuments)
 			}
 
 			// Search endpoints
@@ -268,8 +270,12 @@ func main() {
 				rag.POST("", searchHandler.Ask)
 			}
 
-			// Query history
+			// Streaming RAG endpoint
+			authenticated.POST("/ask-stream", searchHandler.AskStream)
+
+			// Query history and statistics
 			authenticated.GET("/query-history", searchHandler.GetQueryHistory)
+			authenticated.GET("/query-stats", searchHandler.GetQueryStats)
 		}
 	}
 

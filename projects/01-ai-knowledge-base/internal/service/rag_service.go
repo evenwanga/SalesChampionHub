@@ -10,9 +10,16 @@ import (
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 )
 
+// StreamChunk represents a chunk of streamed response
+type StreamChunk struct {
+	Content      string `json:"content"`
+	FinishReason string `json:"finish_reason,omitempty"`
+}
+
 // LLMClient defines the interface for LLM services
 type LLMClient interface {
 	GenerateRAGAnswer(ctx context.Context, query string, contextChunks []string) (string, error)
+	GenerateRAGAnswerStream(ctx context.Context, query string, contextChunks []string) (<-chan StreamChunk, <-chan error)
 	HealthCheck(ctx context.Context) error
 }
 
@@ -238,6 +245,11 @@ func (s *RAGService) truncateContent(content string, maxLen int) string {
 		return content
 	}
 	return content[:maxLen-3] + "..."
+}
+
+// GenerateAnswerStream generates a streaming answer based on context chunks
+func (s *RAGService) GenerateAnswerStream(ctx context.Context, question string, contextChunks []string) (<-chan StreamChunk, <-chan error) {
+	return s.llmClient.GenerateRAGAnswerStream(ctx, question, contextChunks)
 }
 
 // Request/Response DTOs

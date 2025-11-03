@@ -182,8 +182,15 @@ CREATE INDEX idx_vec_chunk ON vectors(chunk_id);
 CREATE INDEX idx_vec_kb ON vectors(kb_id);
 
 -- Vector similarity index (HNSW for fast approximate nearest neighbor search)
+-- HNSW parameters:
+--   m = 16: Number of bi-directional links per node (higher = better recall, more memory)
+--   ef_construction = 64: Size of dynamic candidate list during construction (higher = better index quality, slower build)
+-- For production, consider: m = 32, ef_construction = 128 for better quality
 CREATE INDEX idx_vec_embedding_hnsw ON vectors USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
+
+-- Additional index on chunks for better performance
+CREATE INDEX idx_chunks_embedding_hnsw ON document_chunks(kb_id, document_id);
 
 -- ========================================
 -- 6. Query Logs

@@ -213,3 +213,107 @@ func (h *DocumentHandler) DeleteDocument(c *gin.Context) {
 
 	middleware.RespondWithSuccess(c, gin.H{"message": "document deleted successfully"})
 }
+
+// UpdateDocumentStatus updates a document's status (e.g., for reprocessing)
+// @Summary Update document status
+// @Description Update a document's status, optionally trigger reprocessing
+// @Tags documents
+// @Accept json
+// @Produce json
+// @Param id path string true "Document ID"
+// @Param request body UpdateDocumentStatusRequest true "Status update request"
+// @Security BearerAuth
+// @Success 200 {object} middleware.SuccessResponse{message=string}
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/{id}/status [put]
+func (h *DocumentHandler) UpdateDocumentStatus(c *gin.Context) {
+	docID := c.Param("id")
+
+	var req UpdateDocumentStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondBadRequest(c, "invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.docService.UpdateDocumentStatus(c.Request.Context(), docID, req.Status, req.SetProcessedAt); err != nil {
+		if err == repository.ErrDocumentNotFound {
+			middleware.RespondNotFound(c, "document not found")
+			return
+		}
+		middleware.RespondInternalError(c, "failed to update document status: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{"message": "document status updated successfully"})
+}
+
+// BatchDeleteDocuments deletes multiple documents
+// @Summary Batch delete documents
+// @Description Delete multiple documents by their IDs
+// @Tags documents
+// @Accept json
+// @Produce json
+// @Param request body BatchDeleteRequest true "Batch delete request"
+// @Security BearerAuth
+// @Success 200 {object} middleware.SuccessResponse{data=BatchDeleteResponse}
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/batch-delete [post]
+func (h *DocumentHandler) BatchDeleteDocuments(c *gin.Context) {
+	var req BatchDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondBadRequest(c, "invalid request: "+err.Error())
+		return
+	}
+
+	if len(req.DocumentIDs) == 0 {
+		middleware.RespondBadRequest(c, "document_ids cannot be empty")
+		return
+	}
+
+	if len(req.DocumentIDs) > 100 {
+		middleware.RespondBadRequest(c, "cannot delete more than 100 documents at once")
+		return
+	}
+
+	successCount := 0
+	failedIDs := []string{}
+
+	for _, docID := range req.DocumentIDs {
+		if err := h.docService.DeleteDocument(c.Request.Context(), docID); err != nil {
+			failedIDs = append(failedIDs, docID)
+		} else {
+			successCount++
+		}
+	}
+
+	response := BatchDeleteResponse{
+		SuccessCount: successCount,
+		FailedCount:  len(failedIDs),
+		FailedIDs:    failedIDs,
+	}
+
+	middleware.RespondWithSuccess(c, response)
+}
+
+// Request/Response DTOs
+
+// UpdateDocumentStatusRequest represents a status update request
+type UpdateDocumentStatusRequest struct {
+	Status         string `json:"status" binding:"required,oneof=pending processing completed failed"`
+	SetProcessedAt bool   `json:"set_processed_at"`
+}
+
+// BatchDeleteRequest represents a batch delete request
+type BatchDeleteRequest struct {
+	DocumentIDs []string `json:"document_ids" binding:"required,min=1,max=100"`
+}
+
+// BatchDeleteResponse represents the result of a batch delete operation
+type BatchDeleteResponse struct {
+	SuccessCount int      `json:"success_count"`
+	FailedCount  int      `json:"failed_count"`
+	FailedIDs    []string `json:"failed_ids,omitempty"`
+}

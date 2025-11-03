@@ -33,6 +33,10 @@ var SupportedFileTypes = map[string]bool{
 	".txt":  true,
 	".html": true,
 	".htm":  true,
+	".xlsx": true, // Excel
+	".xls":  true, // Excel (legacy)
+	".pptx": true, // PowerPoint
+	".ppt":  true, // PowerPoint (legacy)
 }
 
 // DocumentService provides business logic for document operations

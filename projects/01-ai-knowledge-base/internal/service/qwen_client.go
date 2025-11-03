@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -148,6 +150,142 @@ func (c *QwenClient) GenerateRAGAnswer(ctx context.Context, query string, contex
 	return c.GenerateAnswer(ctx, systemPrompt, userPrompt)
 }
 
+// GenerateRAGAnswerStream generates a streaming answer based on context chunks
+func (c *QwenClient) GenerateRAGAnswerStream(ctx context.Context, query string, contextChunks []string) (<-chan StreamChunk, <-chan error) {
+	chunkChan := make(chan StreamChunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Build context from chunks
+		context := ""
+		for i, chunk := range contextChunks {
+			context += fmt.Sprintf("\n[文档%d]\n%s\n", i+1, chunk)
+		}
+
+		// Build prompts
+		systemPrompt := `你是一个专业的知识库问答助手。请根据提供的文档内容回答用户的问题。
+
+要求：
+1. 仅基于提供的文档内容回答，不要编造信息
+2. 如果文档中没有相关信息，请明确告知用户
+3. 回答要准确、简洁、易懂
+4. 如果可以，引用具体的文档片段
+5. 使用中文回答`
+
+		userPrompt := fmt.Sprintf(`参考文档：
+%s
+
+用户问题：%s
+
+请根据上述文档内容回答用户的问题。`, context, query)
+
+		messages := []Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		}
+
+		// Prepare request body with streaming enabled
+		reqBody := QwenRequest{
+			Model: c.model,
+			Input: QwenInput{
+				Messages: messages,
+			},
+			Parameters: QwenParameters{
+				ResultFormat:        "message",
+				IncrementalOutput:   true, // Enable streaming
+			},
+		}
+
+		jsonData, err := json.Marshal(reqBody)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to marshal request: %w", err)
+			return
+		}
+
+		// Create HTTP request
+		req, err := http.NewRequestWithContext(ctx, "POST", c.apiURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			errChan <- fmt.Errorf("failed to create request: %w", err)
+			return
+		}
+
+		// Set headers for SSE
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("X-DashScope-SSE", "enable") // Enable SSE for Qwen
+
+		// Send request
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			errChan <- fmt.Errorf("%w: %v", ErrLLMRequestFailed, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		// Check status code
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			errChan <- fmt.Errorf("%w: status %d, body: %s", ErrLLMRequestFailed, resp.StatusCode, string(body))
+			return
+		}
+
+		// Read SSE stream
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// SSE format: "data: {json}"
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+
+			// Extract JSON data
+			data := strings.TrimPrefix(line, "data:")
+			data = strings.TrimSpace(data)
+
+			if data == "" || data == "[DONE]" {
+				continue
+			}
+
+			// Parse JSON response
+			var streamResp QwenResponse
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				continue // Skip invalid JSON
+			}
+
+			// Extract content
+			if len(streamResp.Output.Choices) > 0 {
+				choice := streamResp.Output.Choices[0]
+				chunk := StreamChunk{
+					Content:      choice.Message.Content,
+					FinishReason: choice.FinishReason,
+				}
+
+				select {
+				case chunkChan <- chunk:
+				case <-ctx.Done():
+					errChan <- ctx.Err()
+					return
+				}
+
+				// Check if generation is complete
+				if choice.FinishReason == "stop" {
+					break
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			errChan <- fmt.Errorf("error reading stream: %w", err)
+		}
+	}()
+
+	return chunkChan, errChan
+}
+
 // HealthCheck checks if the Qwen API is accessible
 func (c *QwenClient) HealthCheck(ctx context.Context) error {
 	_, err := c.GenerateAnswer(ctx, "You are a helpful assistant.", "Hello")
@@ -172,10 +310,11 @@ type QwenInput struct {
 }
 
 type QwenParameters struct {
-	ResultFormat string  `json:"result_format,omitempty"`
-	Temperature  float64 `json:"temperature,omitempty"`
-	TopP         float64 `json:"top_p,omitempty"`
-	MaxTokens    int     `json:"max_tokens,omitempty"`
+	ResultFormat      string  `json:"result_format,omitempty"`
+	Temperature       float64 `json:"temperature,omitempty"`
+	TopP              float64 `json:"top_p,omitempty"`
+	MaxTokens         int     `json:"max_tokens,omitempty"`
+	IncrementalOutput bool    `json:"incremental_output,omitempty"` // Enable streaming
 }
 
 type QwenResponse struct {
@@ -218,6 +357,42 @@ func (m *MockLLMClient) GenerateRAGAnswer(ctx context.Context, query string, con
 	answer += "这是一个基于检索增强生成(RAG)的模拟回答。"
 	answer += "在生产环境中，千问大模型会分析文档内容并生成准确的答案。"
 	return answer, nil
+}
+
+// GenerateRAGAnswerStream generates a mock streaming RAG answer
+func (m *MockLLMClient) GenerateRAGAnswerStream(ctx context.Context, query string, contextChunks []string) (<-chan StreamChunk, <-chan error) {
+	chunkChan := make(chan StreamChunk)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(errChan)
+
+		// Simulate streaming by sending answer in chunks
+		answer := fmt.Sprintf("根据提供的 %d 个文档片段，", len(contextChunks))
+		chunks := []string{
+			answer,
+			fmt.Sprintf("针对您的问题「%s」，", query),
+			"这是一个基于检索增强生成(RAG)的模拟流式回答。",
+			"在生产环境中，千问大模型会实时分析文档内容并流式生成准确的答案。",
+		}
+
+		for i, chunk := range chunks {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			case chunkChan <- StreamChunk{
+				Content:      chunk,
+				FinishReason: func() string { if i == len(chunks)-1 { return "stop" } else { return "" } }(),
+			}:
+				// Simulate delay between chunks
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
+
+	return chunkChan, errChan
 }
 
 // HealthCheck mock health check

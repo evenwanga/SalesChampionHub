@@ -2,30 +2,44 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
+	"github.com/redis/go-redis/v9"
 )
 
 // SearchService provides business logic for search operations
 type SearchService struct {
 	vectorRepo   *repository.VectorRepository
 	queryLogRepo *repository.QueryLogRepository
+	redisClient  *redis.Client
 	maxKBs       int
+	cacheTTL     time.Duration
 }
 
 // NewSearchService creates a new search service
 func NewSearchService(
 	vectorRepo *repository.VectorRepository,
 	queryLogRepo *repository.QueryLogRepository,
+	redisClient *redis.Client,
 	maxKBs int,
+	cacheTTL time.Duration,
 ) *SearchService {
+	if cacheTTL == 0 {
+		cacheTTL = 5 * time.Minute // Default cache TTL
+	}
 	return &SearchService{
 		vectorRepo:   vectorRepo,
 		queryLogRepo: queryLogRepo,
+		redisClient:  redisClient,
 		maxKBs:       maxKBs,
+		cacheTTL:     cacheTTL,
 	}
 }
 
@@ -44,6 +58,17 @@ func (s *SearchService) SearchKnowledgeBases(ctx context.Context, req *SearchReq
 		return nil, fmt.Errorf("%w: maximum %d knowledge bases allowed, got %d", ErrKBLimitExceeded, s.maxKBs, len(req.KBIDs))
 	}
 
+	// Try to get from cache if Redis is available
+	if s.redisClient != nil {
+		cacheKey := s.generateSearchCacheKey(req.KBIDs, req.QueryVector, req.TopK, "semantic")
+		cached, err := s.getSearchResultFromCache(ctx, cacheKey)
+		if err == nil && cached != nil {
+			// Update latency to include cache lookup time
+			cached.LatencyMS = int(time.Since(startTime).Milliseconds())
+			return cached, nil
+		}
+	}
+
 	// Perform vector similarity search
 	results, err := s.vectorRepo.SimilaritySearch(ctx, req.KBIDs, req.QueryVector, req.TopK)
 	if err != nil {
@@ -55,6 +80,20 @@ func (s *SearchService) SearchKnowledgeBases(ctx context.Context, req *SearchReq
 
 	// Calculate latency
 	latency := time.Since(startTime)
+
+	// Build response
+	response := &SearchResponse{
+		Results:     uniqueResults,
+		TotalCount:  len(uniqueResults),
+		LatencyMS:   int(latency.Milliseconds()),
+		KBsSearched: len(req.KBIDs),
+	}
+
+	// Cache the results if Redis is available
+	if s.redisClient != nil {
+		cacheKey := s.generateSearchCacheKey(req.KBIDs, req.QueryVector, req.TopK, "semantic")
+		_ = s.cacheSearchResult(ctx, cacheKey, response) // Ignore cache errors
+	}
 
 	// Log query if user context is provided
 	if req.TenantID != "" && req.UserID != "" {
@@ -83,12 +122,7 @@ func (s *SearchService) SearchKnowledgeBases(ctx context.Context, req *SearchReq
 		}()
 	}
 
-	return &SearchResponse{
-		Results:     uniqueResults,
-		TotalCount:  len(uniqueResults),
-		LatencyMS:   int(latency.Milliseconds()),
-		KBsSearched: len(req.KBIDs),
-	}, nil
+	return response, nil
 }
 
 // HybridSearch performs hybrid search combining semantic and keyword matching
@@ -236,4 +270,62 @@ type SearchResponse struct {
 	TotalCount  int                        `json:"total_count"`
 	LatencyMS   int                        `json:"latency_ms"`
 	KBsSearched int                        `json:"kbs_searched"`
+}
+
+// Cache helper methods
+
+// generateSearchCacheKey generates a cache key for search results
+func (s *SearchService) generateSearchCacheKey(kbIDs []string, queryVector []float32, topK int, searchType string) string {
+	// Sort KB IDs for consistent cache keys
+	kbIDsStr := strings.Join(kbIDs, ",")
+
+	// Use first and last few vector values to represent the query
+	// (full vector would be too large for cache key)
+	vectorSample := make([]float32, 0, 10)
+	if len(queryVector) > 10 {
+		vectorSample = append(vectorSample, queryVector[:5]...)
+		vectorSample = append(vectorSample, queryVector[len(queryVector)-5:]...)
+	} else {
+		vectorSample = queryVector
+	}
+
+	// Create hash of the vector sample
+	vectorBytes, _ := json.Marshal(vectorSample)
+	vectorHash := sha256.Sum256(vectorBytes)
+	vectorHashStr := hex.EncodeToString(vectorHash[:8]) // Use first 8 bytes
+
+	return fmt.Sprintf("search:%s:%s:%s:%d", searchType, kbIDsStr, vectorHashStr, topK)
+}
+
+// getSearchResultFromCache retrieves cached search results
+func (s *SearchService) getSearchResultFromCache(ctx context.Context, cacheKey string) (*SearchResponse, error) {
+	if s.redisClient == nil {
+		return nil, fmt.Errorf("redis client not available")
+	}
+
+	data, err := s.redisClient.Get(ctx, cacheKey).Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	var response SearchResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// cacheSearchResult caches search results
+func (s *SearchService) cacheSearchResult(ctx context.Context, cacheKey string, response *SearchResponse) error {
+	if s.redisClient == nil {
+		return fmt.Errorf("redis client not available")
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		return err
+	}
+
+	return s.redisClient.Set(ctx, cacheKey, data, s.cacheTTL).Err()
 }

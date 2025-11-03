@@ -2,8 +2,10 @@ package handler
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/middleware"
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -13,6 +15,7 @@ type SearchHandler struct {
 	searchService *service.SearchService
 	ragService    *service.RAGService
 	kbService     *service.KBService
+	queryLogRepo  *repository.QueryLogRepository
 }
 
 // NewSearchHandler creates a new search handler
@@ -20,11 +23,13 @@ func NewSearchHandler(
 	searchService *service.SearchService,
 	ragService *service.RAGService,
 	kbService *service.KBService,
+	queryLogRepo *repository.QueryLogRepository,
 ) *SearchHandler {
 	return &SearchHandler{
 		searchService: searchService,
 		ragService:    ragService,
 		kbService:     kbService,
+		queryLogRepo:  queryLogRepo,
 	}
 }
 
@@ -191,18 +196,214 @@ func (h *SearchHandler) GetQueryHistory(c *gin.Context) {
 	}
 
 	// Get user context
-	_ = middleware.MustGetUserContext(c)
+	user := middleware.MustGetUserContext(c)
 
 	// Get query history from repository
-	// Note: We need to add this to the handler dependencies
-	// For now, return a placeholder response
+	queries, total, err := h.queryLogRepo.GetUserQueryHistory(
+		c.Request.Context(),
+		user.TenantID,
+		user.ID,
+		limit,
+		offset,
+	)
+	if err != nil {
+		middleware.RespondInternalError(c, "Failed to retrieve query history: "+err.Error())
+		return
+	}
+
 	middleware.RespondWithSuccess(c, gin.H{
-		"queries": []interface{}{},
-		"total":   0,
+		"queries": queries,
+		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
-		"message": "Query history feature - repository integration pending",
 	})
+}
+
+// GetQueryStats godoc
+// @Summary 获取查询统计
+// @Description 获取租户的查询统计信息，包括总查询数、独立用户数、平均延迟等
+// @Tags 查询历史
+// @Produce json
+// @Param start_time query string false "开始时间（RFC3339格式，默认：7天前）" default(2025-10-27T00:00:00Z)
+// @Param end_time query string false "结束时间（RFC3339格式，默认：现在）" default(2025-11-03T00:00:00Z)
+// @Success 200 {object} middleware.SuccessResponse{data=repository.QueryStats} "查询统计"
+// @Failure 400 {object} middleware.ErrorResponse "请求参数错误"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /query-stats [get]
+func (h *SearchHandler) GetQueryStats(c *gin.Context) {
+	// Get user context
+	user := middleware.MustGetUserContext(c)
+
+	// Parse time range parameters
+	now := time.Now()
+	startTimeStr := c.DefaultQuery("start_time", now.AddDate(0, 0, -7).Format(time.RFC3339))
+	endTimeStr := c.DefaultQuery("end_time", now.Format(time.RFC3339))
+
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		middleware.RespondBadRequest(c, "Invalid start_time format (use RFC3339): "+err.Error())
+		return
+	}
+
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		middleware.RespondBadRequest(c, "Invalid end_time format (use RFC3339): "+err.Error())
+		return
+	}
+
+	// Validate time range
+	if endTime.Before(startTime) {
+		middleware.RespondBadRequest(c, "end_time must be after start_time")
+		return
+	}
+
+	// Get query statistics from repository
+	stats, err := h.queryLogRepo.GetTenantQueryStats(
+		c.Request.Context(),
+		user.TenantID,
+		startTime,
+		endTime,
+	)
+	if err != nil {
+		middleware.RespondInternalError(c, "Failed to retrieve query stats: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, stats)
+}
+
+// AskStream godoc
+// @Summary RAG 问答（流式）
+// @Description 基于知识库内容回答问题（流式响应），使用检索增强生成(RAG)技术。通过BGE-large-zh模型(1024维向量)进行语义检索，结合千问(Qwen)大语言模型实时流式生成回答
+// @Tags RAG
+// @Accept json
+// @Produce text/event-stream
+// @Param request body AskRequestBody true "问答请求"
+// @Success 200 {string} string "SSE流式响应"
+// @Failure 400 {object} middleware.ErrorResponse "请求参数错误"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 403 {object} middleware.ErrorResponse "无权访问指定知识库"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /ask-stream [post]
+func (h *SearchHandler) AskStream(c *gin.Context) {
+	var body AskRequestBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		middleware.RespondBadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	// Get user context
+	user := middleware.MustGetUserContext(c)
+
+	// Verify user has access to all requested KBs
+	for _, kbID := range body.KBIDs {
+		hasAccess, err := h.kbService.CheckUserKBAccess(
+			c.Request.Context(),
+			kbID,
+			user.TenantID,
+			user.OrganizationID,
+			user.ID,
+			"can_read",
+		)
+		if err != nil || !hasAccess {
+			middleware.RespondForbidden(c, "Access denied to knowledge base: "+kbID)
+			return
+		}
+	}
+
+	// Set SSE headers
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Transfer-Encoding", "chunked")
+	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
+
+	// Build search request
+	searchReq := &service.SearchRequest{
+		KBIDs:       body.KBIDs,
+		QueryVector: body.QueryVector,
+		QueryText:   body.Question,
+		TopK:        body.TopK,
+		TenantID:    user.TenantID,
+		UserID:      user.ID,
+	}
+
+	// Execute search to get context
+	searchResp, err := h.searchService.SearchKnowledgeBases(c.Request.Context(), searchReq)
+	if err != nil {
+		// Send error as SSE event
+		c.SSEvent("error", gin.H{"message": "Failed to retrieve documents: " + err.Error()})
+		c.Writer.Flush()
+		return
+	}
+
+	// Extract context chunks
+	chunks := make([]string, len(searchResp.Results))
+	for i, result := range searchResp.Results {
+		chunks[i] = result.Content
+	}
+
+	// Send sources as first event
+	sources := make([]service.Source, len(searchResp.Results))
+	for i, result := range searchResp.Results {
+		sources[i] = service.Source{
+			DocumentID:     result.DocumentID,
+			Filename:       result.Filename,
+			ChunkID:        result.ChunkID,
+			ChunkIndex:     result.ChunkIndex,
+			Similarity:     result.Similarity,
+			KBID:           result.KBID,
+			ContentSnippet: h.truncateContent(result.Content, 200),
+		}
+	}
+
+	c.SSEvent("sources", sources)
+	c.Writer.Flush()
+
+	// Start streaming answer generation
+	chunkChan, errChan := h.ragService.GenerateAnswerStream(c.Request.Context(), body.Question, chunks)
+
+	// Stream response chunks
+	for {
+		select {
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				// Channel closed, streaming complete
+				c.SSEvent("done", gin.H{"message": "Stream completed"})
+				c.Writer.Flush()
+				return
+			}
+
+			// Send chunk as SSE event
+			c.SSEvent("chunk", gin.H{
+				"content":       chunk.Content,
+				"finish_reason": chunk.FinishReason,
+			})
+			c.Writer.Flush()
+
+		case err := <-errChan:
+			if err != nil {
+				c.SSEvent("error", gin.H{"message": err.Error()})
+				c.Writer.Flush()
+				return
+			}
+
+		case <-c.Request.Context().Done():
+			// Client disconnected
+			return
+		}
+	}
+}
+
+// truncateContent truncates content to max length
+func (h *SearchHandler) truncateContent(content string, maxLen int) string {
+	if len(content) <= maxLen {
+		return content
+	}
+	return content[:maxLen-3] + "..."
 }
 
 // Request body DTOs for Swagger documentation
