@@ -9,13 +9,15 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Database   DatabaseConfig
-	Redis      RedisConfig
+	Database  DatabaseConfig
+	Redis     RedisConfig
 	UserCenter UserCenterConfig
-	Server     ServerConfig
-	Logto      LogtoConfig
-	Features   FeatureFlags
-	Query      QueryConfig
+	Server    ServerConfig
+	Logto     LogtoConfig
+	LLM       LLMConfig
+	Embedding EmbeddingConfig
+	Features  FeatureFlags
+	Query     QueryConfig
 }
 
 // DatabaseConfig holds database connection settings
@@ -57,6 +59,25 @@ type LogtoConfig struct {
 	AppID       string
 	AppSecret   string
 	APIResource string
+}
+
+// LLMConfig holds LLM service settings
+type LLMConfig struct {
+	Provider string        // "qwen", "openai", "mock"
+	APIKey   string        // API key for LLM service
+	APIURL   string        // API URL (optional, uses provider default if empty)
+	Model    string        // Model name (e.g., "qwen-plus", "gpt-4")
+	Timeout  time.Duration // Request timeout
+}
+
+// EmbeddingConfig holds embedding service settings
+type EmbeddingConfig struct {
+	Provider  string        // "bge", "openai", "mock"
+	APIURL    string        // API URL for embedding service
+	APIKey    string        // API key (if needed)
+	Model     string        // Model name (e.g., "bge-large-zh")
+	Dimension int           // Embedding dimension
+	Timeout   time.Duration // Request timeout
 }
 
 // FeatureFlags holds feature toggle settings
@@ -104,6 +125,21 @@ func Load() (*Config, error) {
 			AppID:       getEnv("LOGTO_M2M_APP_ID", ""),
 			AppSecret:   getEnv("LOGTO_M2M_APP_SECRET", ""),
 			APIResource: getEnv("LOGTO_API_RESOURCE", "https://api.saleschampionhub.com/kb"),
+		},
+		LLM: LLMConfig{
+			Provider: getEnv("LLM_PROVIDER", "qwen"),
+			APIKey:   getEnv("LLM_API_KEY", ""),
+			APIURL:   getEnv("LLM_API_URL", ""),
+			Model:    getEnv("LLM_MODEL", "qwen-plus"),
+			Timeout:  time.Duration(getEnvInt("LLM_TIMEOUT", 30)) * time.Second,
+		},
+		Embedding: EmbeddingConfig{
+			Provider:  getEnv("EMBEDDING_PROVIDER", "bge"),
+			APIURL:    getEnv("EMBEDDING_API_URL", "http://bge-embedding:8000"),
+			APIKey:    getEnv("EMBEDDING_API_KEY", ""),
+			Model:     getEnv("EMBEDDING_MODEL", "bge-large-zh"),
+			Dimension: getEnvInt("EMBEDDING_DIMENSION", 1024),
+			Timeout:   time.Duration(getEnvInt("EMBEDDING_TIMEOUT", 30)) * time.Second,
 		},
 		Features: FeatureFlags{
 			EnableAuditLog: getEnvBool("ENABLE_AUDIT_LOG", true),

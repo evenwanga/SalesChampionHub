@@ -10,12 +10,19 @@ import (
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 )
 
+// LLMClient defines the interface for LLM services
+type LLMClient interface {
+	GenerateRAGAnswer(ctx context.Context, query string, contextChunks []string) (string, error)
+	HealthCheck(ctx context.Context) error
+}
+
 // RAGService provides Retrieval-Augmented Generation service
 type RAGService struct {
 	searchService *SearchService
 	vectorRepo    *repository.VectorRepository
 	queryLogRepo  *repository.QueryLogRepository
-	maxContextLen int // Maximum context length for LLM
+	llmClient     LLMClient // LLM client for answer generation
+	maxContextLen int       // Maximum context length for LLM
 }
 
 // NewRAGService creates a new RAG service
@@ -23,12 +30,14 @@ func NewRAGService(
 	searchService *SearchService,
 	vectorRepo *repository.VectorRepository,
 	queryLogRepo *repository.QueryLogRepository,
+	llmClient LLMClient,
 	maxContextLen int,
 ) *RAGService {
 	return &RAGService{
 		searchService: searchService,
 		vectorRepo:    vectorRepo,
 		queryLogRepo:  queryLogRepo,
+		llmClient:     llmClient,
 		maxContextLen: maxContextLen,
 	}
 }
@@ -62,9 +71,25 @@ func (s *RAGService) Ask(ctx context.Context, req *AskRequest) (*AskResponse, er
 	contextStr, sources := s.buildContext(searchResp.Results, s.maxContextLen)
 
 	// Step 3: Generate answer using LLM
-	// TODO: Integrate with real LLM service (OpenAI, Claude, etc.)
-	// For now, return a mock answer based on retrieved context
-	answer := s.generateMockAnswer(req.Question, contextStr, searchResp.Results)
+	var answer string
+	if len(searchResp.Results) == 0 {
+		answer = "抱歉，我在知识库中没有找到与您问题相关的信息。请尝试重新表述您的问题，或者联系管理员补充相关知识内容。"
+	} else {
+		// Extract content chunks for LLM
+		chunks := make([]string, len(searchResp.Results))
+		for i, result := range searchResp.Results {
+			chunks[i] = result.Content
+		}
+
+		// Generate answer using LLM
+		llmAnswer, err := s.llmClient.GenerateRAGAnswer(ctx, req.Question, chunks)
+		if err != nil {
+			// Fallback to mock answer if LLM fails
+			answer = s.generateMockAnswer(req.Question, contextStr, searchResp.Results)
+		} else {
+			answer = llmAnswer
+		}
+	}
 
 	// Calculate total latency
 	latency := time.Since(startTime)
@@ -149,8 +174,8 @@ func (s *RAGService) buildContext(results []*repository.SearchResult, maxLen int
 	return strings.Join(contextParts, "\n\n"), sources
 }
 
-// generateMockAnswer generates a mock answer based on context
-// TODO: Replace this with real LLM integration (OpenAI GPT-4, Claude, etc.)
+// generateMockAnswer generates a fallback answer when LLM is unavailable
+// This method is used as a fallback when the real LLM service fails
 func (s *RAGService) generateMockAnswer(question string, context string, results []*repository.SearchResult) string {
 	if len(results) == 0 {
 		return "抱歉，我在知识库中没有找到与您问题相关的信息。请尝试重新表述您的问题，或者联系管理员补充相关知识内容。"

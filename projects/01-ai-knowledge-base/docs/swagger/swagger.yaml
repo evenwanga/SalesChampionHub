@@ -29,6 +29,27 @@ definitions:
       timestamp:
         type: string
     type: object
+  middleware.PaginatedResponse:
+    properties:
+      data: {}
+      meta:
+        $ref: '#/definitions/middleware.MetaInfo'
+      pagination:
+        $ref: '#/definitions/middleware.Pagination'
+      success:
+        type: boolean
+    type: object
+  middleware.Pagination:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   middleware.SuccessResponse:
     properties:
       data: {}
@@ -36,6 +57,46 @@ definitions:
         $ref: '#/definitions/middleware.MetaInfo'
       success:
         type: boolean
+    type: object
+  models.Document:
+    properties:
+      chunk_count:
+        type: integer
+      content:
+        type: string
+      content_hash:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      file_path:
+        type: string
+      file_size:
+        type: integer
+      file_type:
+        type: string
+      filename:
+        type: string
+      id:
+        type: string
+      kb_id:
+        type: string
+      knowledge_base:
+        allOf:
+        - $ref: '#/definitions/models.KnowledgeBase'
+        description: Relations
+      metadata:
+        $ref: '#/definitions/models.JSONMap'
+      processed_at:
+        type: string
+      status:
+        description: pending, processing, completed, failed
+        type: string
+      updated_at:
+        type: string
+      uploaded_by:
+        type: string
     type: object
   models.JSONMap:
     additionalProperties: true
@@ -75,6 +136,8 @@ definitions:
     type: object
   models.KnowledgeBaseMount:
     properties:
+      created_at:
+        type: string
       id:
         type: integer
       is_active:
@@ -97,6 +160,8 @@ definitions:
       permissions:
         $ref: '#/definitions/models.JSONMap'
       tenant_id:
+        type: string
+      updated_at:
         type: string
       user_id:
         type: string
@@ -278,7 +343,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 基于知识库内容回答问题，使用检索增强生成(RAG)技术
+      description: 基于知识库内容回答问题，使用检索增强生成(RAG)技术。通过BGE-large-zh模型(1024维向量)进行语义检索，结合千问(Qwen)大语言模型生成准确回答
       parameters:
       - description: 问答请求
         in: body
@@ -319,6 +384,179 @@ paths:
       summary: RAG 问答
       tags:
       - RAG
+  /documents:
+    get:
+      description: List documents in a knowledge base with pagination and filters
+      parameters:
+      - description: Knowledge Base ID
+        in: query
+        name: kb_id
+        required: true
+        type: string
+      - default: 50
+        description: Number of results per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by status (pending, processing, completed, failed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by file type (.pdf, .docx, .md, etc.)
+        in: query
+        name: file_type
+        type: string
+      - description: Search in filename and content
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.PaginatedResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Document'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List documents
+      tags:
+      - documents
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a document file (PDF, Word, Markdown, TXT, HTML) to a knowledge
+        base
+      parameters:
+      - description: Knowledge Base ID
+        in: formData
+        name: kb_id
+        required: true
+        type: string
+      - description: Document file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - default: false
+        description: Check for duplicate documents
+        in: formData
+        name: check_duplicate
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Document'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "413":
+          description: File too large
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "415":
+          description: Unsupported file type
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload a document to a knowledge base
+      tags:
+      - documents
+  /documents/{id}:
+    delete:
+      description: Soft delete a document by ID
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                message:
+                  type: string
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a document
+      tags:
+      - documents
+    get:
+      description: Get a document by its ID
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Document'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a document
+      tags:
+      - documents
   /knowledge-bases:
     get:
       description: 分页获取知识库列表，支持多种过滤条件
@@ -852,7 +1090,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 在指定的知识库中进行语义搜索或混合搜索，返回最相关的文档片段
+      description: 在指定的知识库中进行语义搜索或混合搜索，返回最相关的文档片段。使用BGE-large-zh模型生成1024维向量进行语义匹配
       parameters:
       - description: 搜索请求
         in: body

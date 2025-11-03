@@ -35,6 +35,8 @@ type KnowledgeBaseMount struct {
 	MountedAt      time.Time `json:"mounted_at"`
 	Permissions    JSONMap   `json:"permissions" gorm:"type:jsonb"`
 	IsActive       bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 
 	// Relations
 	KnowledgeBase *KnowledgeBase `json:"knowledge_base,omitempty" gorm:"foreignKey:KBID"`

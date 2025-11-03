@@ -30,7 +30,7 @@ func NewSearchHandler(
 
 // Search godoc
 // @Summary 搜索知识库
-// @Description 在指定的知识库中进行语义搜索或混合搜索，返回最相关的文档片段
+// @Description 在指定的知识库中进行语义搜索或混合搜索，返回最相关的文档片段。使用BGE-large-zh模型生成1024维向量进行语义匹配
 // @Tags 搜索
 // @Accept json
 // @Produce json
@@ -105,7 +105,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 
 // Ask godoc
 // @Summary RAG 问答
-// @Description 基于知识库内容回答问题，使用检索增强生成(RAG)技术
+// @Description 基于知识库内容回答问题，使用检索增强生成(RAG)技术。通过BGE-large-zh模型(1024维向量)进行语义检索，结合千问(Qwen)大语言模型生成准确回答
 // @Tags RAG
 // @Accept json
 // @Produce json

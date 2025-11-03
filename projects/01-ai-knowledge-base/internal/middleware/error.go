@@ -35,6 +35,22 @@ type SuccessResponse struct {
 	Meta    MetaInfo    `json:"meta,omitempty"`
 }
 
+// PaginatedResponse represents a paginated success response
+type PaginatedResponse struct {
+	Success bool         `json:"success"`
+	Data    interface{}  `json:"data"`
+	Meta    MetaInfo     `json:"meta,omitempty"`
+	Pagination Pagination `json:"pagination"`
+}
+
+// Pagination contains pagination information
+type Pagination struct {
+	Page       int   `json:"page"`
+	PageSize   int   `json:"page_size"`
+	TotalPages int   `json:"total_pages"`
+	TotalCount int64 `json:"total_count"`
+}
+
 // AbortWithError aborts the request with a standardized error response
 func AbortWithError(c *gin.Context, statusCode int, errorCode, message string) {
 	c.AbortWithStatusJSON(statusCode, ErrorResponse{

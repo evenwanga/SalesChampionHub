@@ -123,20 +123,69 @@ func main() {
 	kbRepo := repository.NewKBRepository(db)
 	mountRepo := repository.NewMountRepository(db)
 	docRepo := repository.NewDocumentRepository(db)
+	chunkRepo := repository.NewChunkRepository(db)
 	vectorRepo := repository.NewVectorRepository(db)
 	queryLogRepo := repository.NewQueryLogRepository(db)
 
 	// Initialize cache
 	kbCache := kbcache.NewKBCache(redisClient)
 
+	// Initialize document processing components
+	docParser := service.NewDocumentParser(100000) // 100K chars max per document
+	docChunker := service.NewDocumentChunker(1000, 200) // 1000 chars per chunk, 200 chars overlap
+
+	// Initialize embedding service based on provider
+	var embeddingClient service.EmbeddingClient
+	switch cfg.Embedding.Provider {
+	case "bge":
+		log.Printf("🔢 Initializing BGE embedding service: %s (dimension: %d)", cfg.Embedding.Model, cfg.Embedding.Dimension)
+		embeddingClient = service.NewEmbeddingService(
+			cfg.Embedding.APIURL+"/embeddings",
+			cfg.Embedding.APIKey,
+			cfg.Embedding.Model,
+			cfg.Embedding.Dimension,
+			cfg.Embedding.Timeout,
+		)
+	case "mock":
+		log.Printf("🧪 Using mock embedding service (dimension: %d)", cfg.Embedding.Dimension)
+		embeddingClient = service.NewMockEmbeddingService(cfg.Embedding.Dimension)
+	default:
+		log.Printf("⚠️  Unknown embedding provider '%s', using mock service", cfg.Embedding.Provider)
+		embeddingClient = service.NewMockEmbeddingService(1024)
+	}
+
+	// Initialize document processor
+	docProcessor := service.NewDocumentProcessor(docRepo, chunkRepo, vectorRepo, docParser, docChunker, embeddingClient)
+
+	// Initialize LLM client based on provider
+	var llmClient service.LLMClient
+	switch cfg.LLM.Provider {
+	case "qwen":
+		if cfg.LLM.APIKey != "" {
+			log.Printf("🤖 Initializing Qwen LLM client with model: %s", cfg.LLM.Model)
+			llmClient = service.NewQwenClient(cfg.LLM.APIKey, cfg.LLM.APIURL, cfg.LLM.Model, cfg.LLM.Timeout)
+		} else {
+			log.Println("⚠️  LLM_API_KEY not set, using mock LLM client")
+			llmClient = service.NewMockLLMClient()
+		}
+	case "mock":
+		log.Println("🧪 Using mock LLM client (for testing)")
+		llmClient = service.NewMockLLMClient()
+	default:
+		log.Printf("⚠️  Unknown LLM provider '%s', using mock client", cfg.LLM.Provider)
+		llmClient = service.NewMockLLMClient()
+	}
+
 	// Initialize services
 	kbService := service.NewKBService(kbRepo, mountRepo, docRepo, kbCache, cfg.Query.MaxKBQueryLimit)
 	searchService := service.NewSearchService(vectorRepo, queryLogRepo, cfg.Query.MaxKBQueryLimit)
-	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, 8000) // 8000 chars max context
+	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, llmClient, 8000) // 8000 chars max context
+	docService := service.NewDocumentService(docRepo, kbService, docProcessor, "./uploads", 100*1024*1024, 1000, 200) // 100MB max, 1000 char chunks, 200 char overlap
 
 	// Initialize handlers
 	kbHandler := handler.NewKBHandler(kbService)
 	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService)
+	docHandler := handler.NewDocumentHandler(docService)
 
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -197,6 +246,15 @@ func main() {
 
 			// User accessible KBs
 			authenticated.GET("/user/accessible-kbs", kbHandler.GetAccessibleKBs)
+
+			// Documents
+			docs := authenticated.Group("/documents")
+			{
+				docs.POST("", docHandler.UploadDocument)
+				docs.GET("", docHandler.ListDocuments)
+				docs.GET("/:id", docHandler.GetDocument)
+				docs.DELETE("/:id", docHandler.DeleteDocument)
+			}
 
 			// Search endpoints
 			search := authenticated.Group("/search")

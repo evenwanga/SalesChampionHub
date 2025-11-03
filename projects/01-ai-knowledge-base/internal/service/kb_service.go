@@ -20,19 +20,19 @@ var (
 
 // KBService provides business logic for knowledge base operations
 type KBService struct {
-	kbRepo    *repository.KBRepository
-	mountRepo *repository.MountRepository
-	docRepo   *repository.DocumentRepository
-	cache     *cache.KBCache
+	kbRepo    repository.KBRepositoryInterface
+	mountRepo repository.MountRepositoryInterface
+	docRepo   repository.DocumentRepositoryInterface
+	cache     cache.KBCacheInterface
 	maxKBs    int
 }
 
 // NewKBService creates a new KB service
 func NewKBService(
-	kbRepo *repository.KBRepository,
-	mountRepo *repository.MountRepository,
-	docRepo *repository.DocumentRepository,
-	cache *cache.KBCache,
+	kbRepo repository.KBRepositoryInterface,
+	mountRepo repository.MountRepositoryInterface,
+	docRepo repository.DocumentRepositoryInterface,
+	cache cache.KBCacheInterface,
 	maxKBs int,
 ) *KBService {
 	return &KBService{

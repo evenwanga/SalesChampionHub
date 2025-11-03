@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/cache"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 // Mock implementations
@@ -176,7 +176,7 @@ func (m *MockKBCache) GetKBMetadata(ctx context.Context, kbID string) (*models.K
 	return args.Get(0).(*models.KnowledgeBase), args.Error(1)
 }
 
-func (m *MockKBCache) SetKBMetadata(ctx context.Context, kb *models.KnowledgeBase, ttl interface{}) error {
+func (m *MockKBCache) SetKBMetadata(ctx context.Context, kb *models.KnowledgeBase, ttl time.Duration) error {
 	args := m.Called(ctx, kb, ttl)
 	return args.Error(0)
 }
@@ -209,7 +209,7 @@ func (m *MockKBCache) GetAccessibleKBs(ctx context.Context, tenantID, organizati
 	return args.Get(0).([]*models.KnowledgeBase), args.Error(1)
 }
 
-func (m *MockKBCache) SetAccessibleKBs(ctx context.Context, tenantID, organizationID, userID string, kbs []*models.KnowledgeBase, ttl interface{}) error {
+func (m *MockKBCache) SetAccessibleKBs(ctx context.Context, tenantID, organizationID, userID string, kbs []*models.KnowledgeBase, ttl time.Duration) error {
 	args := m.Called(ctx, tenantID, organizationID, userID, kbs, ttl)
 	return args.Error(0)
 }
@@ -222,7 +222,7 @@ func (m *MockKBCache) GetKBStats(ctx context.Context, kbID string) (*repository.
 	return args.Get(0).(*repository.KBStats), args.Error(1)
 }
 
-func (m *MockKBCache) SetKBStats(ctx context.Context, kbID string, stats *repository.KBStats, ttl interface{}) error {
+func (m *MockKBCache) SetKBStats(ctx context.Context, kbID string, stats *repository.KBStats, ttl time.Duration) error {
 	args := m.Called(ctx, kbID, stats, ttl)
 	return args.Error(0)
 }
@@ -252,7 +252,7 @@ func TestKBService_CreateKB(t *testing.T) {
 		}
 
 		mockKBRepo.On("Create", ctx, mock.AnythingOfType("*models.KnowledgeBase")).Return(nil).Once()
-		mockCache.On("SetKBMetadata", ctx, mock.AnythingOfType("*models.KnowledgeBase"), 0).Return(nil).Once()
+		mockCache.On("SetKBMetadata", ctx, mock.AnythingOfType("*models.KnowledgeBase"), mock.Anything).Return(nil).Once()
 
 		kb, err := service.CreateKB(ctx, req)
 		assert.NoError(t, err)
@@ -314,7 +314,7 @@ func TestKBService_GetKB(t *testing.T) {
 
 		mockCache2.On("GetKBMetadata", ctx, "kb_test").Return(nil, cache.ErrCacheMiss).Once()
 		mockKBRepo2.On("GetByID", ctx, "kb_test").Return(testKB, nil).Once()
-		mockCache2.On("SetKBMetadata", ctx, testKB, 0).Return(nil).Once()
+		mockCache2.On("SetKBMetadata", ctx, testKB, mock.Anything).Return(nil).Once()
 
 		kb, err := service2.GetKB(ctx, "kb_test")
 		assert.NoError(t, err)
@@ -429,7 +429,7 @@ func TestKBService_GetUserAccessibleKBs(t *testing.T) {
 
 		mockCache2.On("GetAccessibleKBs", ctx, "tenant_001", "org_001", "user_001").Return(nil, cache.ErrCacheMiss).Once()
 		mockKBRepo2.On("GetUserAccessibleKBs", ctx, "tenant_001", "org_001", "user_001", 4).Return(testKBs, nil).Once()
-		mockCache2.On("SetAccessibleKBs", ctx, "tenant_001", "org_001", "user_001", testKBs, 0).Return(nil).Once()
+		mockCache2.On("SetAccessibleKBs", ctx, "tenant_001", "org_001", "user_001", testKBs, mock.Anything).Return(nil).Once()
 
 		kbs, err := service2.GetUserAccessibleKBs(ctx, "tenant_001", "org_001", "user_001")
 		assert.NoError(t, err)
