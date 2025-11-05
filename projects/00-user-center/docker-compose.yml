@@ -8,14 +8,14 @@ version: '3.8'
 services:
   # Logto 核心服务
   logto:
-    image: ghcr.io/logto-io/logto:1.33.0
+    image: ghcr.io/logto-io/logto:latest
     container_name: logto-core
     ports:
       - "3001:3001"  # 核心API
       - "3002:3002"  # 管理控制台
     environment:
       # 数据库连接（使用共享 PostgreSQL）
-      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024}@saleschampion-postgres:5432/logto
+      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024!Secure}@saleschampion-postgres:5432/logto
 
       # 服务端点（生产环境需要修改为实际域名）
       - ENDPOINT=http://localhost:3001
@@ -50,7 +50,7 @@ services:
       - LOGTO_ADMIN_ENDPOINT=http://logto:3002
 
       # 数据库连接（使用共享 PostgreSQL）
-      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024}@saleschampion-postgres:5432/logto
+      - DB_URL=postgresql://postgres:${DB_PASSWORD:-SalesChampion_PG_2024!Secure}@saleschampion-postgres:5432/logto
 
       # Redis连接（使用共享 Redis DB 0）
       - REDIS_URL=redis://saleschampion-redis:6379

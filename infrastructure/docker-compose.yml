@@ -115,6 +115,10 @@ services:
       # 监听端口配置
       KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
       KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002, 0.0.0.0:8445 ssl
+
+      # 管理界面配置
+      KONG_ADMIN_GUI_URL: http://localhost:8002
 
       # 声明式配置
       KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
@@ -127,6 +131,8 @@ services:
       - "443:8443"      # HTTPS 代理入口
       - "8001:8001"     # Admin API
       - "8444:8444"     # Admin API SSL
+      - "8002:8002"     # Kong Manager GUI
+      - "8445:8445"     # Kong Manager GUI SSL
     volumes:
       - ./kong:/kong/declarative:ro
     depends_on:
