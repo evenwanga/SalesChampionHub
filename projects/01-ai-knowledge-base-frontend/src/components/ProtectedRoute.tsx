@@ -19,17 +19,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   // Get and store Logto access token when authenticated
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      // Get access token without resource parameter
-      // This returns the default access token (IdToken) from Logto
-      getAccessToken()
+      // Request access token for the API resource
+      // This is required to get a proper access token (not ID token) for backend API
+      const apiResource = import.meta.env.VITE_LOGTO_API_RESOURCE || 'https://api.saleschampionhub.com/kb'
+
+      getAccessToken(apiResource)
         .then((token) => {
           // Store token in window object for axios interceptor
           (window as any).__logtoAccessToken = token
-          console.log('Access token obtained successfully')
+          console.log('Access token obtained successfully for resource:', apiResource)
           setTokenReady(true)
         })
         .catch((error) => {
-          console.error('Failed to get access token:', error)
+          console.error('Failed to get access token for resource:', apiResource, error)
           // Continue anyway to avoid blocking the UI
           // The API calls will fail with 401, which is handled by axios interceptor
           setTokenReady(true)

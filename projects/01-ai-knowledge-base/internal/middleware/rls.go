@@ -49,16 +49,16 @@ func (m *RLSMiddleware) setSessionVariables(tenantID, organizationID, userID str
 	// These will automatically reset after the transaction/connection is returned to pool
 
 	sqls := []string{
-		fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", escapeSQLString(tenantID)),
-		fmt.Sprintf("SET LOCAL app.current_user = '%s'", escapeSQLString(userID)),
+		fmt.Sprintf("SET LOCAL \"app.current_tenant\" = '%s'", escapeSQLString(tenantID)),
+		fmt.Sprintf("SET LOCAL \"app.current_user\" = '%s'", escapeSQLString(userID)),
 	}
 
 	// Organization ID is optional (user might not belong to any organization)
 	if organizationID != "" {
-		sqls = append(sqls, fmt.Sprintf("SET LOCAL app.current_organization = '%s'", escapeSQLString(organizationID)))
+		sqls = append(sqls, fmt.Sprintf("SET LOCAL \"app.current_organization\" = '%s'", escapeSQLString(organizationID)))
 	} else {
 		// Set empty string if no organization
-		sqls = append(sqls, "SET LOCAL app.current_organization = ''")
+		sqls = append(sqls, "SET LOCAL \"app.current_organization\" = ''")
 	}
 
 	// Execute all SET statements
@@ -75,14 +75,14 @@ func (m *RLSMiddleware) setSessionVariables(tenantID, organizationID, userID str
 // Use this when you need to set RLS context outside of HTTP request context
 func SetRLSContextForDB(db *gorm.DB, tenantID, organizationID, userID string) error {
 	sqls := []string{
-		fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", escapeSQLString(tenantID)),
-		fmt.Sprintf("SET LOCAL app.current_user = '%s'", escapeSQLString(userID)),
+		fmt.Sprintf("SET LOCAL \"app.current_tenant\" = '%s'", escapeSQLString(tenantID)),
+		fmt.Sprintf("SET LOCAL \"app.current_user\" = '%s'", escapeSQLString(userID)),
 	}
 
 	if organizationID != "" {
-		sqls = append(sqls, fmt.Sprintf("SET LOCAL app.current_organization = '%s'", escapeSQLString(organizationID)))
+		sqls = append(sqls, fmt.Sprintf("SET LOCAL \"app.current_organization\" = '%s'", escapeSQLString(organizationID)))
 	} else {
-		sqls = append(sqls, "SET LOCAL app.current_organization = ''")
+		sqls = append(sqls, "SET LOCAL \"app.current_organization\" = ''")
 	}
 
 	for _, sql := range sqls {

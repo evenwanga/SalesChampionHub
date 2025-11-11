@@ -1204,3 +1204,154 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ### Via Kong Gateway
 - User Center: `http://localhost/api/v1/auth/*`
 - Knowledge Base: `http://localhost/api/v1/knowledge-bases/*`
+
+---
+
+## Docker 环境运行状况报告
+
+> **最后更新**: 2025-11-09
+> **Docker 版本**: 28.5.1 (build e180ab8)
+
+### 运行中的容器（8个）
+
+| 容器名称 | 镜像 | 状态 | 端口映射 | 运行时长 |
+|---------|------|------|---------|---------|
+| **kb-api-server** | 01-ai-knowledge-base-api-server | Up 4 days (healthy) | 8080:8080 | 4 days |
+| **kb-bge-embedding** | 01-ai-knowledge-base-bge-embedding | Up 4 days (healthy) | 8100:8000 | 4 days |
+| **user-center-custom-api** | 00-user-center-custom-api | Up 4 days (healthy) | 3003:3003 | 4 days |
+| **logto-core** | ghcr.io/logto-io/logto:latest | Up 4 days (healthy) | 3001-3002:3001-3002 | 4 days |
+| **kong-gateway** | kong:3.5 | Up 4 days (healthy) | 80:8000, 443:8443, 8001-8002:8001-8002, 8444-8445:8444-8445 | 4 days |
+| **saleschampion-postgres** | pgvector/pgvector:pg16 | Up 4 days (healthy) | 5432:5432 | 4 days |
+| **kong-deck** | kong/deck:latest | Up 7 days | - | 7 days |
+| **saleschampion-redis** | redis:7-alpine | Up 7 days (healthy) | 6379:6379 | 7 days |
+
+### 已停止的容器（1个）
+
+| 容器名称 | 镜像 | 状态 | 说明 |
+|---------|------|------|------|
+| kong-migrations | kong:3.5 | Exited (0) 4 days ago | Kong 数据库迁移任务（一次性） |
+
+### Docker 网络配置（6个）
+
+| 网络名称 | 驱动类型 | 用途 |
+|---------|---------|------|
+| infrastructure_saleschampion_network | bridge | 基础设施层网络 |
+| 00-user-center_user_center_network | bridge | 用户中心服务网络 |
+| 01-ai-knowledge-base_kb_network | bridge | 知识库服务网络 |
+| bridge | bridge | Docker 默认网络 |
+| host | host | 主机网络模式 |
+| none | null | 无网络模式 |
+
+### 关键 Docker 卷
+
+| 卷名称 | 用途 |
+|-------|------|
+| infrastructure_postgres_data | 基础设施 PostgreSQL 数据 |
+| infrastructure_redis_data | 基础设施 Redis 数据 |
+| 00-user-center_postgres_data | 用户中心 PostgreSQL 数据 |
+| 00-user-center_redis_data | 用户中心 Redis 数据 |
+| 01-ai-knowledge-base_postgres_data | 知识库 PostgreSQL 数据 |
+| 01-ai-knowledge-base_redis_data | 知识库 Redis 数据 |
+| kb-bge-model-cache | BGE 嵌入模型缓存 |
+
+### 本地 Docker 镜像（关键镜像）
+
+| 镜像名称 | TAG | 大小 | 创建时间 |
+|---------|-----|------|---------|
+| 01-ai-knowledge-base-api-server | latest | 99.3MB | 4 days ago |
+| 01-ai-knowledge-base-bge-embedding | latest | 1.16GB | 6 days ago |
+| 00-user-center-custom-api | latest | 227MB | 9 days ago |
+| ghcr.io/logto-io/logto | latest (1.33.0) | 1.8GB | 9 days ago |
+| kong | 3.5 | 395MB | 17 months ago |
+| pgvector/pgvector | pg16 | 644MB | 2 months ago |
+| redis | 7-alpine | 61.4MB | 5 weeks ago |
+| kong/deck | latest | 69.1MB | 11 days ago |
+
+### 环境健康状态
+
+#### ✅ 基础设施层（Layer 0）
+- **PostgreSQL**: 运行正常 (pgvector/pgvector:pg16)
+  - 端口: 5432
+  - 健康检查: PASSED
+  - 数据卷: 持久化
+
+- **Redis**: 运行正常 (redis:7-alpine)
+  - 端口: 6379
+  - 健康检查: PASSED
+  - 数据卷: 持久化
+
+- **Kong Gateway**: 运行正常 (kong:3.5)
+  - Admin API: 8001
+  - Proxy HTTP: 80
+  - Proxy HTTPS: 443
+  - 健康检查: PASSED
+
+#### ✅ 子项目0 - 用户中心（Layer 1）
+- **Logto Core**: 运行正常
+  - 管理控制台: 3002
+  - API 端点: 3001
+  - 健康检查: PASSED
+
+- **Custom API**: 运行正常
+  - API 端点: 3003
+  - 健康检查: PASSED
+
+#### ✅ 子项目1 - AI知识库（Layer 2）
+- **API Server**: 运行正常
+  - API 端点: 8080
+  - Swagger UI: http://localhost:8080/swagger/index.html
+  - 健康检查: PASSED
+
+- **BGE Embedding Service**: 运行正常
+  - API 端点: 8100 (内部 8000)
+  - 模型: BGE-large-zh (1024维)
+  - 健康检查: PASSED
+
+### 运行稳定性评估
+
+- **总体运行时长**: 基础设施层和应用层已稳定运行 4-7 天
+- **健康检查**: 所有关键服务健康检查均通过
+- **容器重启**: 无异常重启记录
+- **资源状态**: 所有容器处于 Up 状态
+
+### 快速诊断命令
+
+```bash
+# 检查所有服务健康状态
+docker ps --format "table {{.Names}}\t{{.Status}}"
+
+# 检查特定服务日志
+docker logs -f kb-api-server
+docker logs -f kong-gateway
+docker logs -f logto-core
+
+# 检查数据库连接
+docker exec saleschampion-postgres psql -U postgres -c "SELECT version();"
+
+# 检查 Redis 连接
+docker exec saleschampion-redis redis-cli -a SalesChampion_Redis_2024 PING
+
+# 检查 Kong 配置
+curl http://localhost:8001/status
+
+# 验证 API 服务健康
+curl http://localhost:8080/health
+curl http://localhost:3003/health
+```
+
+### 注意事项
+
+1. **端口占用**: 确保以下端口未被其他程序占用：
+   - 80, 443 (Kong Gateway)
+   - 3001-3003 (User Center)
+   - 5432 (PostgreSQL)
+   - 6379 (Redis)
+   - 8001-8002 (Kong Admin)
+   - 8080 (Knowledge Base API)
+   - 8100 (BGE Embedding)
+
+2. **数据持久化**: 所有关键数据已通过 Docker 卷持久化，容器重启不会丢失数据
+
+3. **网络隔离**: 各子项目使用独立的 Docker 网络，确保服务隔离和安全
+
+4. **健康检查**: 所有服务都配置了健康检查机制，Docker 会自动监控服务状态

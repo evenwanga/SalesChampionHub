@@ -110,8 +110,24 @@ func main() {
 	router.Use(middleware.RequestID())
 	router.Use(middleware.ErrorRecovery())
 
-	// Initialize middleware instances
-	authMiddleware := middleware.NewAuthMiddleware(
+	// Initialize Logto authentication middleware
+	log.Printf("🔐 Initializing Logto authentication...")
+	log.Printf("   Endpoint: %s", cfg.Logto.Endpoint)
+	log.Printf("   Resource: %s", cfg.Logto.APIResource)
+
+	logtoAuth, err := middleware.NewLogtoAuthMiddleware(
+		cfg.Logto.Endpoint,
+		cfg.Logto.APIResource,
+		redisClient,
+		cfg.Features.CacheTTL,
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize Logto authentication: %v", err)
+	}
+	log.Println("✅ Logto authentication initialized successfully")
+
+	// Keep the old auth middleware for backward compatibility (if needed)
+	_ = middleware.NewAuthMiddleware(
 		userCenterClient,
 		redisClient,
 		cfg.Features.CacheTTL,
@@ -213,9 +229,9 @@ func main() {
 			})
 		})
 
-		// Authenticated endpoints
+		// Authenticated endpoints (using Logto)
 		authenticated := v1.Group("")
-		authenticated.Use(authMiddleware.Authenticate())
+		authenticated.Use(logtoAuth.Authenticate()) // Use Logto JWT verification
 		authenticated.Use(rlsMiddleware.SetRLSContext())
 		{
 			// User info

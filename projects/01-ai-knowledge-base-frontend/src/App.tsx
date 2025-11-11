@@ -42,6 +42,8 @@ const queryClient = new QueryClient({
 const logtoConfig: LogtoConfig = {
   endpoint: env.VITE_LOGTO_ENDPOINT,
   appId: env.VITE_LOGTO_APP_ID,
+  scopes: ['read', 'write', 'delete', 'admin'], // Request all available scopes
+  resources: [env.VITE_LOGTO_API_RESOURCE], // API resource to get access token for
 }
 
 function App() {
