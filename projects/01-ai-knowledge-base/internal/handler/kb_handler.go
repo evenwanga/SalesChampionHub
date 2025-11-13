@@ -50,6 +50,10 @@ func (h *KBHandler) CreateKB(c *gin.Context) {
 		req.OwnerID = user.ID
 	}
 
+	// Set tenant and organization from context
+	req.TenantID = user.TenantID
+	req.OrganizationID = user.OrganizationID
+
 	kb, err := h.kbService.CreateKB(c.Request.Context(), &req)
 	if err != nil {
 		middleware.RespondInternalError(c, "Failed to create knowledge base: "+err.Error())

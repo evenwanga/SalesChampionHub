@@ -221,12 +221,13 @@ func (h *SearchHandler) GetQueryHistory(c *gin.Context) {
 
 // GetQueryStats godoc
 // @Summary 获取查询统计
-// @Description 获取租户的查询统计信息，包括总查询数、独立用户数、平均延迟等
+// @Description 获取租户的查询统计信息，支持按日/周/月分组统计
 // @Tags 查询历史
 // @Produce json
-// @Param start_time query string false "开始时间（RFC3339格式，默认：7天前）" default(2025-10-27T00:00:00Z)
-// @Param end_time query string false "结束时间（RFC3339格式，默认：现在）" default(2025-11-03T00:00:00Z)
-// @Success 200 {object} middleware.SuccessResponse{data=repository.QueryStats} "查询统计"
+// @Param start_date query string false "开始日期（YYYY-MM-DD格式，默认：7天前）" default(2025-11-05)
+// @Param end_date query string false "结束日期（YYYY-MM-DD格式，默认：今天）" default(2025-11-12)
+// @Param group_by query string false "分组方式：day/week/month（默认：day）" default(day)
+// @Success 200 {object} middleware.SuccessResponse{data=[]repository.QueryStatsGrouped} "分组查询统计"
 // @Failure 400 {object} middleware.ErrorResponse "请求参数错误"
 // @Failure 401 {object} middleware.ErrorResponse "未授权"
 // @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
@@ -236,35 +237,47 @@ func (h *SearchHandler) GetQueryStats(c *gin.Context) {
 	// Get user context
 	user := middleware.MustGetUserContext(c)
 
-	// Parse time range parameters
+	// Parse date range parameters (YYYY-MM-DD format)
 	now := time.Now()
-	startTimeStr := c.DefaultQuery("start_time", now.AddDate(0, 0, -7).Format(time.RFC3339))
-	endTimeStr := c.DefaultQuery("end_time", now.Format(time.RFC3339))
+	startDateStr := c.DefaultQuery("start_date", now.AddDate(0, 0, -7).Format("2006-01-02"))
+	endDateStr := c.DefaultQuery("end_date", now.Format("2006-01-02"))
+	groupBy := c.DefaultQuery("group_by", "day")
 
-	startTime, err := time.Parse(time.RFC3339, startTimeStr)
-	if err != nil {
-		middleware.RespondBadRequest(c, "Invalid start_time format (use RFC3339): "+err.Error())
+	// Validate group_by parameter
+	if groupBy != "day" && groupBy != "week" && groupBy != "month" {
+		middleware.RespondBadRequest(c, "Invalid group_by parameter. Must be 'day', 'week', or 'month'")
 		return
 	}
 
-	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	// Parse dates
+	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		middleware.RespondBadRequest(c, "Invalid end_time format (use RFC3339): "+err.Error())
+		middleware.RespondBadRequest(c, "Invalid start_date format (use YYYY-MM-DD): "+err.Error())
 		return
 	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		middleware.RespondBadRequest(c, "Invalid end_date format (use YYYY-MM-DD): "+err.Error())
+		return
+	}
+
+	// Extend end_date to end of day (23:59:59)
+	endDate = endDate.Add(24*time.Hour - time.Second)
 
 	// Validate time range
-	if endTime.Before(startTime) {
-		middleware.RespondBadRequest(c, "end_time must be after start_time")
+	if endDate.Before(startDate) {
+		middleware.RespondBadRequest(c, "end_date must be after start_date")
 		return
 	}
 
-	// Get query statistics from repository
-	stats, err := h.queryLogRepo.GetTenantQueryStats(
+	// Get grouped query statistics from repository
+	stats, err := h.queryLogRepo.GetTenantQueryStatsByGroup(
 		c.Request.Context(),
 		user.TenantID,
-		startTime,
-		endTime,
+		startDate,
+		endDate,
+		groupBy,
 	)
 	if err != nil {
 		middleware.RespondInternalError(c, "Failed to retrieve query stats: "+err.Error())

@@ -126,9 +126,11 @@ class SearchService {
 
     return {
       data: response.data.data!.queries,
-      total: response.data.data!.total,
-      limit: response.data.data!.limit,
-      offset: response.data.data!.offset,
+      meta: {
+        total: response.data.data!.total,
+        limit: response.data.data!.limit,
+        offset: response.data.data!.offset,
+      }
     }
   }
 
@@ -136,10 +138,28 @@ class SearchService {
    * Get query statistics
    */
   async getQueryStats(options?: QueryStatsOptions): Promise<QueryStats[]> {
-    const response = await api.get<APIResponse<{ stats: QueryStats[] }>>('/query-stats', {
-      params: options,
-    })
-    return response.data.data!.stats
+    try {
+      const response = await api.get<APIResponse<{ stats: QueryStats[] }>>('/query-stats', {
+        params: options,
+      })
+      // Handle different possible response structures
+      if (response.data.data) {
+        // If data has a stats property, return it
+        if ('stats' in response.data.data) {
+          return response.data.data.stats
+        }
+        // If data itself is an array, return it
+        if (Array.isArray(response.data.data)) {
+          return response.data.data as QueryStats[]
+        }
+      }
+      // Fallback to empty array
+      return []
+    } catch (error) {
+      console.warn('Query stats API failed, using fallback data:', error)
+      // Return empty array on error for graceful degradation
+      return []
+    }
   }
 }
 

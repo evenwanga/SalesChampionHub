@@ -53,6 +53,13 @@ func (s *KBService) CreateKB(ctx context.Context, req *CreateKBRequest) (*models
 	if req.OwnerID == "" {
 		return nil, fmt.Errorf("%w: owner_id is required", ErrInvalidInput)
 	}
+	if req.OwnerType == "" {
+		return nil, fmt.Errorf("%w: owner_type is required", ErrInvalidInput)
+	}
+	// Validate owner_type
+	if req.OwnerType != "tenant" && req.OwnerType != "organization" && req.OwnerType != "user" {
+		return nil, fmt.Errorf("%w: owner_type must be 'tenant', 'organization', or 'user'", ErrInvalidInput)
+	}
 
 	// Generate KB ID
 	kbID := "kb_" + uuid.New().String()
@@ -66,10 +73,51 @@ func (s *KBService) CreateKB(ctx context.Context, req *CreateKBRequest) (*models
 		Visibility:  req.Visibility,
 		Tags:        req.Tags,
 		Settings:    req.Settings,
+		IsActive:    true, // Default to active
 	}
 
 	if err := s.kbRepo.Create(ctx, kb); err != nil {
 		return nil, fmt.Errorf("failed to create KB: %w", err)
+	}
+
+	// Create mount record to grant owner access
+	permissions := models.JSONMap{
+		"can_read":   true,
+		"can_write":  true,
+		"can_delete": true,
+		"can_share":  true,
+	}
+
+	var mount *models.KnowledgeBaseMount
+	var err error
+
+	// Call the appropriate mount method based on owner type
+	switch req.OwnerType {
+	case "tenant":
+		mount, err = s.mountRepo.MountToTenant(ctx, kbID, req.OwnerID, req.OwnerID, permissions)
+	case "organization":
+		mount, err = s.mountRepo.MountToOrganization(ctx, kbID, req.TenantID, req.OwnerID, req.OwnerID, permissions)
+	case "user":
+		orgID := &req.OrganizationID
+		if req.OrganizationID == "" {
+			orgID = nil
+		}
+		mount, err = s.mountRepo.MountToUser(ctx, kbID, req.TenantID, req.OwnerID, req.OwnerID, orgID, permissions)
+	default:
+		// This should never happen due to validation above
+		_ = s.kbRepo.Delete(ctx, kbID)
+		return nil, fmt.Errorf("%w: invalid owner_type", ErrInvalidInput)
+	}
+
+	if err != nil {
+		// Rollback KB creation if mount fails
+		_ = s.kbRepo.Delete(ctx, kbID)
+		return nil, fmt.Errorf("failed to create mount record: %w", err)
+	}
+
+	// Invalidate cache for accessible KBs
+	if mount != nil {
+		_ = s.cache.InvalidateUserKBAccess(ctx, req.TenantID, req.OrganizationID, req.OwnerID)
 	}
 
 	// Cache the KB metadata
@@ -115,6 +163,9 @@ func (s *KBService) UpdateKB(ctx context.Context, kbID string, req *UpdateKBRequ
 	}
 	if req.Visibility != nil {
 		kb.Visibility = *req.Visibility
+	}
+	if req.IsActive != nil {
+		kb.IsActive = *req.IsActive
 	}
 	if req.Tags != nil {
 		kb.Tags = req.Tags
@@ -323,18 +374,22 @@ func (s *KBService) CheckUserKBAccess(ctx context.Context, kbID, tenantID, organ
 // Request/Response DTOs
 
 type CreateKBRequest struct {
-	Name        string         `json:"name" binding:"required"`
-	Description string         `json:"description"`
-	OwnerID     string         `json:"owner_id" binding:"required"`
-	Visibility  string         `json:"visibility"` // public, private, shared
-	Tags        []string       `json:"tags"`
-	Settings    models.JSONMap `json:"settings"`
+	Name           string         `json:"name" binding:"required"`
+	Description    string         `json:"description"`
+	OwnerType      string         `json:"owner_type" binding:"required"` // tenant, organization, user
+	OwnerID        string         `json:"owner_id" binding:"required"`
+	TenantID       string         `json:"tenant_id"`        // From context, set by handler
+	OrganizationID string         `json:"organization_id"`  // From context, set by handler
+	Visibility     string         `json:"visibility"` // public, private, shared
+	Tags           []string       `json:"tags"`
+	Settings       models.JSONMap `json:"settings"`
 }
 
 type UpdateKBRequest struct {
 	Name        *string        `json:"name"`
 	Description *string        `json:"description"`
 	Visibility  *string        `json:"visibility"`
+	IsActive    *bool          `json:"is_active"`
 	Tags        []string       `json:"tags"`
 	Settings    models.JSONMap `json:"settings"`
 }

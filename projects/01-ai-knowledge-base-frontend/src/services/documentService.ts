@@ -37,9 +37,11 @@ class DocumentService {
 
     return {
       data: response.data.data!.documents,
-      total: response.data.data!.total,
-      limit: response.data.data!.limit,
-      offset: response.data.data!.offset,
+      meta: {
+        total: response.data.data!.total,
+        limit: response.data.data!.limit,
+        offset: response.data.data!.offset,
+      }
     }
   }
 

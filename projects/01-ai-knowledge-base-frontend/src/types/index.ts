@@ -9,9 +9,11 @@ export interface APIResponse<T = unknown> {
 
 export interface PaginatedResponse<T> {
   data: T[]
-  total: number
-  limit: number
-  offset: number
+  meta: {
+    total: number
+    limit: number
+    offset: number
+  }
 }
 
 // User and Auth Types
@@ -42,12 +44,15 @@ export interface KnowledgeBase {
   id: string
   name: string
   description: string
-  owner_type: 'tenant' | 'organization' | 'user'
+  owner_type?: 'tenant' | 'organization' | 'user'  // Optional for backward compatibility
   owner_id: string
-  created_by: string
+  created_by?: string
   visibility: 'public' | 'private' | 'organization'
   embedding_model: string
   metadata: Record<string, unknown>
+  is_active?: boolean
+  document_count?: number
+  chunk_count?: number
   created_at: string
   updated_at: string
   deleted_at?: string
@@ -67,6 +72,7 @@ export interface UpdateKBRequest {
   name?: string
   description?: string
   visibility?: 'public' | 'private' | 'organization'
+  is_active?: boolean
   metadata?: Record<string, unknown>
 }
 
@@ -213,14 +219,14 @@ export interface AskResponse {
 
 // Query Log Types
 export interface QueryLog {
-  id: string
+  id: number
   tenant_id: string
   user_id: string
-  query: string
+  query_text: string // 匹配后端字段名
   query_type: 'search' | 'ask'
   kb_ids: string[]
   result_count: number
-  processing_time_ms: number
+  latency_ms: number // 匹配后端字段名
   created_at: string
 }
 

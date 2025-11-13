@@ -56,14 +56,17 @@ func (r *MountRepository) MountToTenant(ctx context.Context, kbID, tenantID, mou
 	}
 
 	// Create mount
+	// Note: For tenant mounts, organization_id and user_id must be NULL per chk_single_target constraint
 	mount := &models.KnowledgeBaseMount{
-		KBID:        kbID,
-		MountType:   MountTypeTenant,
-		TenantID:    &tenantID,
-		MountedBy:   mountedBy,
-		MountedAt:   time.Now().UTC(),
-		Permissions: permissions,
-		IsActive:    true,
+		KBID:           kbID,
+		MountType:      MountTypeTenant,
+		TenantID:       &tenantID,
+		OrganizationID: nil, // Must be NULL for tenant mounts
+		UserID:         nil, // Must be NULL for tenant mounts
+		MountedBy:      mountedBy,
+		MountedAt:      time.Now().UTC(),
+		Permissions:    permissions,
+		IsActive:       true,
 	}
 
 	if err := r.db.WithContext(ctx).Create(mount).Error; err != nil {
@@ -93,11 +96,13 @@ func (r *MountRepository) MountToOrganization(ctx context.Context, kbID, tenantI
 	}
 
 	// Create mount
+	// Note: For organization mounts, tenant_id and user_id must be NULL per chk_single_target constraint
 	mount := &models.KnowledgeBaseMount{
 		KBID:           kbID,
 		MountType:      MountTypeOrganization,
-		TenantID:       &tenantID,
+		TenantID:       nil, // Must be NULL for organization mounts
 		OrganizationID: &organizationID,
+		UserID:         nil, // Must be NULL for organization mounts
 		MountedBy:      mountedBy,
 		MountedAt:      time.Now().UTC(),
 		Permissions:    permissions,
@@ -131,11 +136,12 @@ func (r *MountRepository) MountToUser(ctx context.Context, kbID, tenantID, userI
 	}
 
 	// Create mount
+	// Note: For user mounts, tenant_id and organization_id must be NULL per chk_single_target constraint
 	mount := &models.KnowledgeBaseMount{
 		KBID:           kbID,
 		MountType:      MountTypeUser,
-		TenantID:       &tenantID,
-		OrganizationID: organizationID,
+		TenantID:       nil, // Must be NULL for user mounts
+		OrganizationID: nil, // Must be NULL for user mounts
 		UserID:         &userID,
 		MountedBy:      mountedBy,
 		MountedAt:      time.Now().UTC(),

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import knowledgeBaseService from '@/services/knowledgeBaseService'
 import type { KnowledgeBase, CreateKBRequest, UpdateKBRequest, KBListOptions } from '@/types'
-import { message } from 'antd'
 
 /**
  * Query keys for knowledge base data
@@ -20,8 +20,14 @@ export const kbKeys = {
  * Hook to fetch knowledge base list with pagination and filtering
  */
 export function useKnowledgeBases(options?: KBListOptions) {
+  // Stabilize queryKey to prevent infinite loops
+  const queryKey = useMemo(
+    () => kbKeys.list(options || {}),
+    [options?.limit, options?.offset, options?.search]
+  )
+
   return useQuery({
-    queryKey: kbKeys.list(options || {}),
+    queryKey,
     queryFn: () => knowledgeBaseService.listKBs(options),
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -74,10 +80,6 @@ export function useCreateKB() {
       // Invalidate and refetch knowledge base lists
       queryClient.invalidateQueries({ queryKey: kbKeys.lists() })
       queryClient.invalidateQueries({ queryKey: kbKeys.accessible() })
-      message.success('知识库创建成功')
-    },
-    onError: (error: any) => {
-      message.error(error?.error || '知识库创建失败')
     },
   })
 }
@@ -85,20 +87,17 @@ export function useCreateKB() {
 /**
  * Hook to update a knowledge base
  */
-export function useUpdateKB(id: string) {
+export function useUpdateKB() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: UpdateKBRequest) => knowledgeBaseService.updateKB(id, data),
-    onSuccess: (data: KnowledgeBase) => {
+    mutationFn: ({ id, data }: { id: string; data: UpdateKBRequest }) =>
+      knowledgeBaseService.updateKB(id, data),
+    onSuccess: (data: KnowledgeBase, variables) => {
       // Update cache with new data
-      queryClient.setQueryData(kbKeys.detail(id), data)
+      queryClient.setQueryData(kbKeys.detail(variables.id), data)
       // Invalidate lists to ensure consistency
       queryClient.invalidateQueries({ queryKey: kbKeys.lists() })
-      message.success('知识库更新成功')
-    },
-    onError: (error: any) => {
-      message.error(error?.error || '知识库更新失败')
     },
   })
 }
@@ -117,10 +116,6 @@ export function useDeleteKB() {
       // Invalidate lists
       queryClient.invalidateQueries({ queryKey: kbKeys.lists() })
       queryClient.invalidateQueries({ queryKey: kbKeys.accessible() })
-      message.success('知识库删除成功')
-    },
-    onError: (error: any) => {
-      message.error(error?.error || '知识库删除失败')
     },
   })
 }

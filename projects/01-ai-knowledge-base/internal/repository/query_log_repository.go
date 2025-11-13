@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -79,21 +80,33 @@ func (r *QueryLogRepository) GetTenantQueryStats(ctx context.Context, tenantID s
 	}
 
 	// Average latency
+	var avgLatency sql.NullFloat64
 	if err := r.db.WithContext(ctx).
 		Model(&models.QueryLog{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, startTime, endTime).
 		Select("AVG(latency_ms) as avg_latency").
-		Scan(&stats.AvgLatencyMS).Error; err != nil {
+		Scan(&avgLatency).Error; err != nil {
 		return nil, fmt.Errorf("failed to calculate average latency: %w", err)
+	}
+	if avgLatency.Valid {
+		stats.AvgLatencyMS = avgLatency.Float64
+	} else {
+		stats.AvgLatencyMS = 0
 	}
 
 	// Total results returned
+	var totalResults sql.NullInt64
 	if err := r.db.WithContext(ctx).
 		Model(&models.QueryLog{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, startTime, endTime).
 		Select("SUM(result_count) as total_results").
-		Scan(&stats.TotalResults).Error; err != nil {
+		Scan(&totalResults).Error; err != nil {
 		return nil, fmt.Errorf("failed to sum results: %w", err)
+	}
+	if totalResults.Valid {
+		stats.TotalResults = totalResults.Int64
+	} else {
+		stats.TotalResults = 0
 	}
 
 	// Most queried KBs (top 10)
@@ -144,4 +157,79 @@ type QueryStats struct {
 	TotalResults int64            `json:"total_results"`
 	AvgLatencyMS float64          `json:"avg_latency_ms"`
 	TopKBs       map[string]int64 `json:"top_kbs"` // KB ID -> query count
+}
+
+// QueryStatsGrouped represents query statistics grouped by time period
+type QueryStatsGrouped struct {
+	Period              string  `json:"period"`                 // Date period (YYYY-MM-DD)
+	TotalQueries        int64   `json:"total_queries"`          // Total queries in period
+	SearchCount         int64   `json:"search_count"`           // Search-type queries
+	AskCount            int64   `json:"ask_count"`              // Ask-type queries
+	AvgProcessingTimeMS float64 `json:"avg_processing_time_ms"` // Average processing time
+}
+
+// GetTenantQueryStatsByGroup retrieves query statistics grouped by time period
+// Supports grouping by day, week, or month
+func (r *QueryLogRepository) GetTenantQueryStatsByGroup(ctx context.Context, tenantID string, startDate, endDate time.Time, groupBy string) ([]*QueryStatsGrouped, error) {
+	var stats []*QueryStatsGrouped
+
+	// Determine date truncation format based on group_by
+	var dateFormat string
+	var dateTrunc string
+	switch groupBy {
+	case "day":
+		dateFormat = "2006-01-02"
+		dateTrunc = "DATE(created_at)"
+	case "week":
+		dateFormat = "2006-01-02"
+		dateTrunc = "DATE_TRUNC('week', created_at)"
+	case "month":
+		dateFormat = "2006-01"
+		dateTrunc = "DATE_TRUNC('month', created_at)"
+	default:
+		dateFormat = "2006-01-02"
+		dateTrunc = "DATE(created_at)"
+	}
+
+	// Raw SQL query to aggregate stats by period
+	query := fmt.Sprintf(`
+		SELECT
+			%s as period,
+			COUNT(*) as total_queries,
+			COUNT(*) FILTER (WHERE query_type = 'search') as search_count,
+			COUNT(*) FILTER (WHERE query_type = 'ask') as ask_count,
+			AVG(latency_ms) as avg_processing_time_ms
+		FROM query_logs
+		WHERE tenant_id = ?
+			AND created_at >= ?
+			AND created_at < ?
+		GROUP BY period
+		ORDER BY period ASC
+	`, dateTrunc)
+
+	type QueryResult struct {
+		Period              time.Time
+		TotalQueries        int64
+		SearchCount         int64
+		AskCount            int64
+		AvgProcessingTimeMS float64
+	}
+
+	var results []QueryResult
+	if err := r.db.WithContext(ctx).Raw(query, tenantID, startDate, endDate).Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("failed to get grouped query stats: %w", err)
+	}
+
+	// Convert to response format
+	for _, result := range results {
+		stats = append(stats, &QueryStatsGrouped{
+			Period:              result.Period.Format(dateFormat),
+			TotalQueries:        result.TotalQueries,
+			SearchCount:         result.SearchCount,
+			AskCount:            result.AskCount,
+			AvgProcessingTimeMS: result.AvgProcessingTimeMS,
+		})
+	}
+
+	return stats, nil
 }

@@ -58,12 +58,15 @@ export const Loading: React.FC<LoadingProps> = ({
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '48px 0',
+        gap: '16px'
       }}
     >
-      <Spin indicator={loadingIcon} size={size} tip={tip} />
+      <Spin indicator={loadingIcon} size={size} />
+      {tip && <div style={{ color: '#666', fontSize: '14px' }}>{tip}</div>}
     </div>
   )
 }
@@ -99,12 +102,15 @@ export const CardLoading: React.FC = () => {
       style={{
         padding: 24,
         display: 'flex',
+        flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
         minHeight: 200,
+        gap: '16px'
       }}
     >
-      <Spin size="large" tip="加载中..." />
+      <Spin size="large" />
+      <div style={{ color: '#666', fontSize: '14px' }}>加载中...</div>
     </div>
   )
 }

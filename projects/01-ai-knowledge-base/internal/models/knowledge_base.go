@@ -18,6 +18,7 @@ type KnowledgeBase struct {
 	TotalSizeBytes int64      `json:"total_size_bytes" gorm:"default:0"`
 	LastUpdatedAt  time.Time  `json:"last_updated_at"`
 	Settings       JSONMap    `json:"settings" gorm:"type:jsonb;default:'{}'"`
+	IsActive       bool       `json:"is_active" gorm:"default:true"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty" gorm:"index"`
@@ -99,6 +100,7 @@ type QueryLog struct {
 	TenantID    string    `json:"tenant_id" gorm:"not null;index"`
 	UserID      string    `json:"user_id" gorm:"not null;index"`
 	QueryText   string    `json:"query_text" gorm:"type:text;not null"`
+	QueryType   string    `json:"query_type" gorm:"type:varchar(20);not null;default:'search'"`
 	KBIDs       []string  `json:"kb_ids" gorm:"type:varchar(50)[]"`
 	ResultCount int       `json:"result_count" gorm:"default:0"`
 	TopKBID     *string   `json:"top_kb_id,omitempty"`

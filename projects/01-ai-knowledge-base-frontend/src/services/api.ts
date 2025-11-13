@@ -15,7 +15,7 @@ const api: AxiosInstance = axios.create({
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     // Get Logto access token from window.__logtoAccessToken
-    // This will be set by the App component after login
+    // Note: Token should be set by ProtectedRoute or App component
     const token = (window as any).__logtoAccessToken
 
     if (token && config.headers) {
