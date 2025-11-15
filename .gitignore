@@ -168,3 +168,6 @@ infrastructure/monitoring/data/
 
 # Docker持久化数据目录
 docker_data/
+
+# 示例/模板目录
+example/
