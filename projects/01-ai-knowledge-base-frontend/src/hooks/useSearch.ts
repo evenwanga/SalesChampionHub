@@ -1,13 +1,31 @@
 import { useMutation } from '@tanstack/react-query'
 import searchService from '@/services/searchService'
-import type { SearchRequest, SearchResponse } from '@/types'
+import type { SearchResponse } from '@/types'
+
+export interface SemanticSearchInput {
+  query: string
+  kbIds: string[]
+  topK?: number
+  searchType?: 'semantic' | 'hybrid'
+  minScore?: number
+}
 
 /**
  * Hook to perform semantic search
  */
 export function useSearch() {
   return useMutation({
-    mutationFn: (data: SearchRequest) => searchService.search(data),
+    mutationFn: async ({ query, kbIds, topK, minScore, searchType }: SemanticSearchInput) => {
+      const payload = await searchService.buildQueryPayload({
+        type: 'search',
+        query,
+        kbIds,
+        topK,
+        minScore,
+        searchType,
+      })
+      return searchService.search(payload)
+    },
   })
 }
 

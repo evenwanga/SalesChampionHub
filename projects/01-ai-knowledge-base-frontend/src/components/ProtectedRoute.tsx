@@ -24,47 +24,48 @@ interface ProtectedRouteProps {
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, getAccessToken } = useLogto()
   const [tokenReady, setTokenReady] = useState(false)
-  const tokenFetchedRef = useRef(false)
+  const refreshTimerRef = useRef<number>()
 
   useEffect(() => {
-    // Reset token state when user signs out
+    const apiResource = import.meta.env.VITE_LOGTO_API_RESOURCE || 'https://api.saleschampionhub.com/kb'
+
     if (!isAuthenticated) {
-      tokenFetchedRef.current = false
       setTokenReady(false)
       setGlobalAccessToken(undefined)
+      if (refreshTimerRef.current) {
+        window.clearInterval(refreshTimerRef.current)
+      }
       return
     }
 
     let cancelled = false
 
-    const ensureToken = async () => {
-      if (tokenFetchedRef.current) {
-        setTokenReady(true)
-        return
-      }
-
+    const fetchAccessToken = async () => {
       try {
-        const apiResource = import.meta.env.VITE_LOGTO_API_RESOURCE || 'https://api.saleschampionhub.com/kb'
         const token = await getAccessToken(apiResource)
-
         if (!cancelled) {
           setGlobalAccessToken(token)
-          tokenFetchedRef.current = true
           setTokenReady(true)
         }
       } catch (error) {
         console.error('Failed to fetch Logto access token:', error)
         if (!cancelled) {
-          // Allow UI to render; backend calls will surface 401s if token missing
           setTokenReady(true)
         }
       }
     }
 
-    void ensureToken()
+    setTokenReady(false)
+    void fetchAccessToken()
+
+    const intervalId = window.setInterval(() => {
+      void fetchAccessToken()
+    }, 45 * 60 * 1000) // Refresh every 45 minutes
+    refreshTimerRef.current = intervalId
 
     return () => {
       cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [getAccessToken, isAuthenticated])
 

@@ -173,48 +173,62 @@ export interface Chunk {
 
 // Search and RAG Types
 export interface SearchRequest {
-  query: string
   kb_ids: string[]
+  query_text: string
+  query_vector: number[]
   top_k?: number
   min_score?: number
-  filters?: Record<string, unknown>
+  search_type?: 'semantic' | 'hybrid'
 }
 
 export interface SearchResult {
+  id: string
   chunk_id: string
-  document_id: string
   kb_id: string
   content: string
-  score: number
-  document: {
-    filename: string
-    file_type: string
-  }
-  metadata: Record<string, unknown>
+  chunk_index: number
+  document_id: string
+  filename: string
+  file_type: string
+  distance: number
+  similarity?: number
+  vector_distance?: number
+  text_boost?: number
 }
 
 export interface SearchResponse {
   results: SearchResult[]
-  query: string
-  kb_ids: string[]
-  total: number
-  processing_time_ms: number
+  total_count: number
+  latency_ms: number
+  kbs_searched: number
 }
 
 export interface AskRequest {
   question: string
   kb_ids: string[]
+  query_vector: number[]
   top_k?: number
   include_sources?: boolean
   stream?: boolean
 }
 
+export interface RagSource {
+  document_id: string
+  filename: string
+  chunk_id: string
+  chunk_index: number
+  similarity: number
+  kb_id: string
+  content_snippet: string
+}
+
 export interface AskResponse {
   answer: string
-  sources: SearchResult[]
-  query: string
-  kb_ids: string[]
-  processing_time_ms: number
+  sources: RagSource[]
+  context?: string
+  confidence: number
+  latency_ms: number
+  kbs_searched: number
 }
 
 // Query Log Types
@@ -257,26 +271,27 @@ export interface SSEEvent {
 
 export interface SSESourcesEvent extends SSEEvent {
   event: 'sources'
-  data: SearchResult[]
+  data: RagSource[]
 }
 
 export interface SSEChunkEvent extends SSEEvent {
   event: 'chunk'
-  data: string
+  data: {
+    content: string
+    finish_reason?: string
+  }
 }
 
 export interface SSEDoneEvent extends SSEEvent {
   event: 'done'
   data: {
-    total_chunks: number
-    processing_time_ms: number
+    message: string
   }
 }
 
 export interface SSEErrorEvent extends SSEEvent {
   event: 'error'
   data: {
-    error: string
     message: string
   }
 }

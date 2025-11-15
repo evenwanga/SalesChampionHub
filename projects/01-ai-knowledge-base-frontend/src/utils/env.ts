@@ -128,6 +128,14 @@ VITE_LOGTO_API_RESOURCE=https://api.saleschampionhub.com/kb
  */
 export const env = validateEnv()
 
+const normalizeBaseUrl = (value?: string): string | undefined => {
+  if (!value) return undefined
+  return value.endsWith('/') ? value.slice(0, -1) : value
+}
+
+const optionalApiBase = normalizeBaseUrl(getEnvVar('VITE_API_BASE_URL'))
+export const apiBaseUrl = optionalApiBase || '/api/v1'
+
 /**
  * Safe access to environment variables with fallbacks
  */
@@ -167,4 +175,5 @@ export function printEnvConfig() {
   console.log(`  VITE_LOGTO_REDIRECT_URI: ${env.VITE_LOGTO_REDIRECT_URI}`)
   console.log(`  VITE_LOGTO_POST_LOGOUT_REDIRECT_URI: ${env.VITE_LOGTO_POST_LOGOUT_REDIRECT_URI}`)
   console.log(`  VITE_LOGTO_API_RESOURCE: ${env.VITE_LOGTO_API_RESOURCE}`)
+  console.log(`  VITE_API_BASE_URL: ${optionalApiBase || '/api/v1'}`)
 }

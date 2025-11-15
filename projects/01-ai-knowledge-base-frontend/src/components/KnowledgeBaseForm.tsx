@@ -27,6 +27,30 @@ export const KnowledgeBaseForm: React.FC<KnowledgeBaseFormProps> = ({
     username?: string
   } | null>(null)
 
+  // 根据弹窗状态和初始值同步表单内容
+  useEffect(() => {
+    if (!open) {
+      form.resetFields()
+      return
+    }
+
+    if (isEditing && initialValues) {
+      form.setFieldsValue({
+        name: initialValues.name,
+        description: initialValues.description,
+        is_active: initialValues.is_active,
+        owner_type: initialValues.owner_type,
+        owner_id: initialValues.owner_id,
+      })
+    } else if (!isEditing) {
+      form.resetFields()
+      form.setFieldsValue({
+        owner_type: 'user',
+        is_active: true,
+      })
+    }
+  }, [open, isEditing, initialValues, form])
+
   // 获取当前用户信息
   useEffect(() => {
     if (open && !isEditing) {
@@ -56,10 +80,14 @@ export const KnowledgeBaseForm: React.FC<KnowledgeBaseFormProps> = ({
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
-      onSubmit(values)
+      await onSubmit(values)
       form.resetFields()
     } catch (error) {
-      console.error('表单验证失败:', error)
+      if ((error as any)?.errorFields) {
+        console.error('表单验证失败:', error)
+      } else {
+        console.error('提交失败:', error)
+      }
     }
   }
 

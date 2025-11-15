@@ -1,7 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import searchService from '@/services/searchService'
-import type { AskRequest, QueryHistoryOptions, QueryStatsOptions, QueryStats } from '@/types'
+import type { QueryHistoryOptions, QueryStatsOptions, QueryStats, AskResponse } from '@/types'
+
+export interface AskMutationInput {
+  question: string
+  kbIds: string[]
+  topK?: number
+  includeSources?: boolean
+}
 
 /**
  * Query keys for RAG data
@@ -17,7 +24,16 @@ export const ragKeys = {
  */
 export function useAsk() {
   return useMutation({
-    mutationFn: (data: AskRequest) => searchService.ask(data),
+    mutationFn: async ({ question, kbIds, topK, includeSources }: AskMutationInput): Promise<AskResponse> => {
+      const payload = await searchService.buildQueryPayload({
+        type: 'ask',
+        query: question,
+        kbIds,
+        topK,
+        includeSources,
+      })
+      return searchService.ask(payload)
+    },
   })
 }
 

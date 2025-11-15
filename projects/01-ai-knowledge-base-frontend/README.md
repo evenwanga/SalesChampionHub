@@ -116,11 +116,12 @@ The frontend communicates with two backend services:
 - **Purpose**: Knowledge base operations
 - **Proxied through Vite**: Requests to `/api` are forwarded to port 8080
 - **Endpoints**:
-  - Knowledge Bases: `/knowledge-bases`
-  - Documents: `/documents`
-  - Search: `/search`
-  - RAG Q&A: `/ask`, `/ask-stream`
-  - Query History: `/query-history`, `/query-stats`
+- Knowledge Bases: `/knowledge-bases`
+- Documents: `/documents`
+- Search: `/search`
+- RAG Q&A: `/ask`, `/ask-stream`
+- Embedding Proxy: `/embedding` (由后端代理 BGE 服务，前端不再直连)
+- Query History: `/query-history`, `/query-stats`
 
 ## Authentication Flow
 

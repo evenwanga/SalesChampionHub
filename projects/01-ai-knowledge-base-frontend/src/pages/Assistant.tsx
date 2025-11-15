@@ -25,7 +25,8 @@ import {
 import { useAccessibleKBs } from '@/hooks/useKnowledgeBases'
 import { useAsk } from '@/hooks/useRAG'
 import searchService from '@/services/searchService'
-import type { SearchResult, SSEEvent } from '@/types'
+import type { RagSource, SSEChunkEvent, SSEEvent, AskRequest } from '@/types'
+import { getErrorMessage } from '@/utils/error'
 import dayjs from 'dayjs'
 
 const { TextArea } = Input
@@ -35,7 +36,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  sources?: SearchResult[]
+  sources?: RagSource[]
   timestamp: Date
   processingTime?: number
 }
@@ -88,21 +89,23 @@ export const Assistant: React.FC = () => {
 
     try {
       const startTime = Date.now()
-      let sources: SearchResult[] = []
+      let sources: RagSource[] = []
 
-      const stream = searchService.askStream({
-        question: userMessage.content,
-        kb_ids: selectedKBs,
-        top_k: topK,
-        include_sources: includeSources,
-        stream: true
-      })
+      const streamPayload = await searchService.buildQueryPayload({
+        type: 'stream',
+        query: userMessage.content,
+        kbIds: selectedKBs,
+        topK,
+        includeSources,
+      }) as AskRequest
+
+      const stream = searchService.askStream(streamPayload)
 
       for await (const event of stream) {
         const sseEvent = event as SSEEvent
 
         if (sseEvent.event === 'sources') {
-          sources = sseEvent.data as SearchResult[]
+          sources = sseEvent.data as RagSource[]
           setMessages(prev => {
             const updated = [...prev]
             const lastMsg = updated[updated.length - 1]
@@ -112,7 +115,10 @@ export const Assistant: React.FC = () => {
             return updated
           })
         } else if (sseEvent.event === 'chunk') {
-          const chunk = sseEvent.data as string
+          const chunkEvent = sseEvent as SSEChunkEvent
+          const chunk = typeof chunkEvent.data === 'object' && chunkEvent.data
+            ? (chunkEvent.data as { content: string }).content
+            : ''
           setMessages(prev => {
             const updated = [...prev]
             const lastMsg = updated[updated.length - 1]
@@ -137,7 +143,8 @@ export const Assistant: React.FC = () => {
         }
       }
     } catch (error: any) {
-      message.error(error?.message || '问答失败')
+      const friendly = getErrorMessage(error, '问答失败')
+      message.error(friendly)
       console.error('Stream error:', error)
     } finally {
       setIsStreaming(false)
@@ -161,10 +168,9 @@ export const Assistant: React.FC = () => {
     try {
       const result = await askMutation.mutateAsync({
         question: userMessage.content,
-        kb_ids: selectedKBs,
-        top_k: topK,
-        include_sources: includeSources,
-        stream: false
+        kbIds: selectedKBs,
+        topK,
+        includeSources,
       })
 
       const assistantMessage: Message = {
@@ -173,12 +179,12 @@ export const Assistant: React.FC = () => {
         content: result.answer,
         sources: result.sources,
         timestamp: new Date(),
-        processingTime: result.processing_time_ms
+        processingTime: result.latency_ms
       }
 
       setMessages(prev => [...prev, assistantMessage])
     } catch (error: any) {
-      message.error(error?.message || '问答失败')
+      message.error(getErrorMessage(error, '问答失败'))
     }
   }
 
@@ -303,18 +309,13 @@ export const Assistant: React.FC = () => {
                           renderItem={(source, index) => (
                             <List.Item key={source.chunk_id}>
                               <List.Item.Meta
-                                avatar={
-                                  <Tag color="blue">#{index + 1}</Tag>
-                                }
+                                avatar={<Tag color="blue">#{index + 1}</Tag>}
                                 title={
                                   <Space>
                                     <FileTextOutlined style={{ color: '#1890ff' }} />
-                                    <Text strong>{source.document.filename}</Text>
-                                    <Tag
-                                      color="green"
-                                      icon={<ThunderboltOutlined />}
-                                    >
-                                      {(source.score * 100).toFixed(1)}%
+                                    <Text strong>{source.filename}</Text>
+                                    <Tag color="green" icon={<ThunderboltOutlined />}>
+                                      {(source.similarity * 100).toFixed(1)}%
                                     </Tag>
                                   </Space>
                                 }
@@ -323,7 +324,7 @@ export const Assistant: React.FC = () => {
                                     ellipsis={{ rows: 2, expandable: true }}
                                     style={{ margin: 0, fontSize: 12 }}
                                   >
-                                    {source.content}
+                                    {source.content_snippet}
                                   </Paragraph>
                                 }
                               />

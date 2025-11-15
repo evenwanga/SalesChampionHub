@@ -1,10 +1,11 @@
 import axios, { AxiosError } from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import type { APIResponse } from '@/types'
+import { apiBaseUrl } from '@/utils/env'
 
 // Create axios instance with default config
 const api: AxiosInstance = axios.create({
-  baseURL: '/api/v1',
+  baseURL: apiBaseUrl,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -37,8 +38,7 @@ api.interceptors.response.use(
   (error: AxiosError<APIResponse>) => {
     // Handle 401 Unauthorized - redirect to login
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('user_info')
+      ;(window as any).__logtoAccessToken = undefined
       window.location.href = '/login'
     }
 

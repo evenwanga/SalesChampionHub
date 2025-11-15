@@ -21,13 +21,10 @@ export const kbKeys = {
  */
 export function useKnowledgeBases(options?: KBListOptions) {
   // Stabilize queryKey to prevent infinite loops
-  const queryKey = useMemo(
-    () => kbKeys.list(options || {}),
-    [options?.limit, options?.offset, options?.search]
-  )
+  const stableFilters = useMemo(() => options ?? {}, [JSON.stringify(options ?? {})])
 
   return useQuery({
-    queryKey,
+    queryKey: kbKeys.list(stableFilters),
     queryFn: () => knowledgeBaseService.listKBs(options),
     staleTime: 5 * 60 * 1000, // 5 minutes
   })

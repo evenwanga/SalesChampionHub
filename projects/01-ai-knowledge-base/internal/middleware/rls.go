@@ -45,20 +45,21 @@ func (m *RLSMiddleware) SetRLSContext() gin.HandlerFunc {
 
 // setSessionVariables sets the PostgreSQL session variables for RLS
 func (m *RLSMiddleware) setSessionVariables(tenantID, organizationID, userID string) error {
-	// Use SET LOCAL for transaction-scoped variables
-	// These will automatically reset after the transaction/connection is returned to pool
+	// Use SET for session-scoped variables in middleware context
+	// These will persist for the connection lifetime and are managed by connection pool
+	// Note: We use SET instead of SET LOCAL here because this is called outside of a transaction
 
 	sqls := []string{
-		fmt.Sprintf("SET LOCAL \"app.current_tenant\" = '%s'", escapeSQLString(tenantID)),
-		fmt.Sprintf("SET LOCAL \"app.current_user\" = '%s'", escapeSQLString(userID)),
+		fmt.Sprintf("SET \"app.current_tenant\" = '%s'", escapeSQLString(tenantID)),
+		fmt.Sprintf("SET \"app.current_user\" = '%s'", escapeSQLString(userID)),
 	}
 
 	// Organization ID is optional (user might not belong to any organization)
 	if organizationID != "" {
-		sqls = append(sqls, fmt.Sprintf("SET LOCAL \"app.current_organization\" = '%s'", escapeSQLString(organizationID)))
+		sqls = append(sqls, fmt.Sprintf("SET \"app.current_organization\" = '%s'", escapeSQLString(organizationID)))
 	} else {
 		// Set empty string if no organization
-		sqls = append(sqls, "SET LOCAL \"app.current_organization\" = ''")
+		sqls = append(sqls, "SET \"app.current_organization\" = ''")
 	}
 
 	// Execute all SET statements
@@ -71,8 +72,10 @@ func (m *RLSMiddleware) setSessionVariables(tenantID, organizationID, userID str
 	return nil
 }
 
-// SetRLSContextForDB sets RLS context directly on a DB instance
-// Use this when you need to set RLS context outside of HTTP request context
+// SetRLSContextForDB sets RLS context directly on a DB instance using SET LOCAL
+// IMPORTANT: This function MUST be called within a transaction (tx *gorm.DB)
+// Use WithRLSContext helper instead, which automatically wraps the operation in a transaction
+// Only use this directly if you are already in a transaction context
 func SetRLSContextForDB(db *gorm.DB, tenantID, organizationID, userID string) error {
 	sqls := []string{
 		fmt.Sprintf("SET LOCAL \"app.current_tenant\" = '%s'", escapeSQLString(tenantID)),
@@ -95,7 +98,7 @@ func SetRLSContextForDB(db *gorm.DB, tenantID, organizationID, userID string) er
 }
 
 // ClearRLSContext clears RLS session variables
-// Usually not needed as SET LOCAL is transaction-scoped
+// Call this when needed to reset session state (e.g., after processing a request)
 func ClearRLSContext(db *gorm.DB) error {
 	sqls := []string{
 		"RESET app.current_tenant",

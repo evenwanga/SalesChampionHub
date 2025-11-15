@@ -12,7 +12,8 @@ import {
   Spin,
   Slider,
   Typography,
-  Alert
+  Alert,
+  App
 } from 'antd'
 import {
   SearchOutlined,
@@ -23,11 +24,13 @@ import {
 import { useAccessibleKBs } from '@/hooks/useKnowledgeBases'
 import { useSearch } from '@/hooks/useSearch'
 import type { SearchResult } from '@/types'
+import { getErrorMessage } from '@/utils/error'
 
 const { TextArea } = Input
 const { Text, Paragraph } = Typography
 
 export const Search: React.FC = () => {
+  const { message } = App.useApp()
   const [query, setQuery] = useState('')
   const [selectedKBs, setSelectedKBs] = useState<string[]>([])
   const [topK, setTopK] = useState(5)
@@ -37,6 +40,7 @@ export const Search: React.FC = () => {
     query: string
     total: number
     processingTime: number
+    serverTotal?: number
   } | null>(null)
 
   const { data: kbsData = [] } = useAccessibleKBs()
@@ -53,21 +57,24 @@ export const Search: React.FC = () => {
     }
 
     try {
+      const trimmedQuery = query.trim()
       const result = await searchMutation.mutateAsync({
-        query: query.trim(),
-        kb_ids: selectedKBs,
-        top_k: topK,
-        min_score: minScore
+        query: trimmedQuery,
+        kbIds: selectedKBs,
+        topK,
+        minScore,
       })
 
       setSearchResults(result.results)
       setSearchMeta({
-        query: result.query,
-        total: result.total,
-        processingTime: result.processing_time_ms
+        query: trimmedQuery,
+        total: result.results.length,
+        processingTime: result.latency_ms,
+        serverTotal: result.total_count
       })
     } catch (error) {
       console.error('搜索失败:', error)
+      message.error(getErrorMessage(error, '搜索失败，请稍后重试'))
     }
   }
 
@@ -225,6 +232,9 @@ export const Search: React.FC = () => {
                 </span>
                 <span>
                   <FileTextOutlined /> 找到 <strong>{searchMeta.total}</strong> 个相关结果
+                  {typeof searchMeta.serverTotal === 'number' && searchMeta.serverTotal !== searchMeta.total && (
+                    <span style={{ marginLeft: 8, color: '#999' }}>（服务器返回 {searchMeta.serverTotal} 条）</span>
+                  )}
                 </span>
                 <span>
                   <ClockCircleOutlined /> 耗时 <strong>{searchMeta.processingTime}</strong> ms
@@ -263,7 +273,7 @@ export const Search: React.FC = () => {
                             width: 40,
                             height: 40,
                             borderRadius: '50%',
-                            background: getScoreColor(item.score),
+                            background: getScoreColor(item.similarity ?? (1 - item.distance / 2)),
                             color: 'white',
                             display: 'flex',
                             alignItems: 'center',
@@ -278,15 +288,15 @@ export const Search: React.FC = () => {
                       title={
                         <Space>
                           <FileTextOutlined style={{ color: '#1890ff' }} />
-                          <Text strong>{item.document.filename}</Text>
-                          <Tag color={item.document.file_type.includes('pdf') ? 'red' : 'blue'}>
-                            {item.document.file_type.split('/')[1]?.toUpperCase() || 'Unknown'}
+                          <Text strong>{item.filename}</Text>
+                          <Tag color={item.file_type.includes('pdf') ? 'red' : 'blue'}>
+                            {item.file_type.split('/').pop()?.toUpperCase() || 'UNKNOWN'}
                           </Tag>
                           <Tag
-                            color={getScoreColor(item.score)}
+                            color={getScoreColor(item.similarity ?? (1 - item.distance / 2))}
                             icon={<ThunderboltOutlined />}
                           >
-                            相似度: {(item.score * 100).toFixed(1)}%
+                            相似度: {((item.similarity ?? (1 - item.distance / 2)) * 100).toFixed(1)}%
                           </Tag>
                         </Space>
                       }
@@ -302,13 +312,6 @@ export const Search: React.FC = () => {
                           >
                             {highlightText(item.content, searchMeta.query)}
                           </Paragraph>
-                          {item.metadata && Object.keys(item.metadata).length > 0 && (
-                            <div style={{ marginTop: 8 }}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                元数据: {JSON.stringify(item.metadata)}
-                              </Text>
-                            </div>
-                          )}
                         </div>
                       }
                     />

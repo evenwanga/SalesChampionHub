@@ -12,6 +12,33 @@ import type {
   APIResponse,
   SSEEvent,
 } from '@/types'
+import { apiBaseUrl } from '@/utils/env'
+import { getErrorMessage } from '@/utils/error'
+
+type WindowWithLogto = Window & { __logtoAccessToken?: string }
+
+interface BasePayloadOptions {
+  query: string
+  kbIds: string[]
+  topK?: number
+}
+
+type SearchPayloadOptions = BasePayloadOptions & {
+  type: 'search'
+  minScore?: number
+  searchType?: 'semantic' | 'hybrid'
+}
+
+type AskPayloadOptions = BasePayloadOptions & {
+  type: 'ask' | 'stream'
+  includeSources?: boolean
+}
+
+type BuildPayloadOptions = SearchPayloadOptions | AskPayloadOptions
+
+interface EmbeddingResponse {
+  embedding: number[]
+}
 
 class SearchService {
   /**
@@ -35,12 +62,12 @@ class SearchService {
    * Returns an async generator for SSE events
    */
   async *askStream(data: AskRequest): AsyncGenerator<SSEEvent> {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch('/api/v1/ask-stream', {
+    const token = typeof window !== 'undefined' ? (window as WindowWithLogto).__logtoAccessToken : undefined
+    const response = await fetch(`${apiBaseUrl}/ask-stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(data),
     })
@@ -56,6 +83,7 @@ class SearchService {
 
     const decoder = new TextDecoder()
     let buffer = ''
+    let currentEvent: SSEEvent['event'] | null = null
 
     try {
       while (true) {
@@ -79,7 +107,12 @@ class SearchService {
 
           // Parse SSE format: "event: eventName" and "data: jsonData"
           if (trimmed.startsWith('event:')) {
-            // Event line - we'll combine it with the next data line
+            const eventName = trimmed.substring(6).trim()
+            if (eventName === 'sources' || eventName === 'chunk' || eventName === 'done' || eventName === 'error') {
+              currentEvent = eventName
+            } else {
+              currentEvent = null
+            }
             continue
           }
 
@@ -87,25 +120,16 @@ class SearchService {
             const dataStr = trimmed.substring(5).trim()
 
             try {
-              const eventData = JSON.parse(dataStr)
-
-              // Determine event type from the data structure
-              let event: SSEEvent
-              if (eventData.sources) {
-                event = { event: 'sources', data: eventData.sources }
-              } else if (eventData.chunk !== undefined) {
-                event = { event: 'chunk', data: eventData.chunk }
-              } else if (eventData.total_chunks !== undefined) {
-                event = { event: 'done', data: eventData }
-              } else if (eventData.error) {
-                event = { event: 'error', data: eventData }
-              } else {
-                continue // Unknown event type
+              const parsed = dataStr ? JSON.parse(dataStr) : undefined
+              if (!currentEvent) {
+                continue
               }
 
-              yield event
+              yield { event: currentEvent, data: parsed }
             } catch (e) {
               console.error('Failed to parse SSE data:', e, dataStr)
+            } finally {
+              currentEvent = null
             }
           }
         }
@@ -159,6 +183,55 @@ class SearchService {
       console.warn('Query stats API failed, using fallback data:', error)
       // Return empty array on error for graceful degradation
       return []
+    }
+  }
+
+  async buildQueryPayload(options: SearchPayloadOptions): Promise<SearchRequest>
+  async buildQueryPayload(options: AskPayloadOptions): Promise<AskRequest>
+  async buildQueryPayload(options: BuildPayloadOptions): Promise<SearchRequest | AskRequest> {
+    const trimmedQuery = options.query.trim()
+    if (!trimmedQuery) {
+      throw new Error('请输入查询内容')
+    }
+
+    const queryVector = await this.generateEmbedding(trimmedQuery)
+    const base = {
+      kb_ids: options.kbIds,
+      top_k: options.topK,
+      query_vector: queryVector,
+    }
+
+    if (options.type === 'search') {
+      return {
+        ...base,
+        query_text: trimmedQuery,
+        min_score: options.minScore,
+        search_type: options.searchType,
+      }
+    }
+
+    return {
+      ...base,
+      question: trimmedQuery,
+      include_sources: options.includeSources,
+      stream: options.type === 'stream',
+    }
+  }
+
+  private async generateEmbedding(query: string): Promise<number[]> {
+    try {
+      const response = await api.post<APIResponse<EmbeddingResponse>>('/embedding', {
+        text: query,
+      })
+      const vector = response.data.data?.embedding
+      if (!vector || vector.length === 0) {
+        throw new Error('向量生成失败')
+      }
+      return vector
+    } catch (error) {
+      const message = getErrorMessage(error)
+      console.error('Embedding request failed:', message)
+      throw new Error('生成查询向量时出现问题，请稍后再试')
     }
   }
 }
