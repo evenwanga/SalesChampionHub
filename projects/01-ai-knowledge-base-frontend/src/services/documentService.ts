@@ -4,6 +4,10 @@ import type {
   DocumentListOptions,
   UpdateDocumentStatusRequest,
   BatchDeleteResponse,
+  BatchUpdateStatusRequest,
+  BatchUpdateStatusResponse,
+  DocumentPreview,
+  DocumentChunksResponse,
   PaginatedResponse,
   APIResponse,
 } from '@/types'
@@ -74,6 +78,70 @@ class DocumentService {
     const response = await api.post<APIResponse<BatchDeleteResponse>>('/documents/batch-delete', {
       document_ids: documentIds,
     })
+    return response.data.data!
+  }
+
+  /**
+   * Batch update document status
+   */
+  async batchUpdateStatus(data: BatchUpdateStatusRequest): Promise<BatchUpdateStatusResponse> {
+    const response = await api.post<APIResponse<BatchUpdateStatusResponse>>(
+      '/documents/batch-update-status',
+      data
+    )
+    return response.data.data!
+  }
+
+  /**
+   * Preview document content
+   */
+  async previewDocument(id: string): Promise<DocumentPreview> {
+    const response = await api.get<APIResponse<DocumentPreview>>(`/documents/${id}/preview`)
+    return response.data.data!
+  }
+
+  /**
+   * Download document
+   */
+  downloadDocument(id: string, filename: string): void {
+    const token = (window as any).__logtoAccessToken
+    const url = `${api.defaults.baseURL}/documents/${id}/download`
+    
+    // Create temporary link and fetch with authorization
+    fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(response => response.blob())
+      .then(blob => {
+        const blobUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.setAttribute('download', filename)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(blobUrl)
+      })
+      .catch(error => {
+        console.error('Download failed:', error)
+        throw error
+      })
+  }
+
+  /**
+   * List document chunks
+   */
+  async listDocumentChunks(
+    documentId: string, 
+    limit: number = 50, 
+    offset: number = 0
+  ): Promise<DocumentChunksResponse> {
+    const response = await api.get<APIResponse<DocumentChunksResponse>>(
+      `/documents/${documentId}/chunks`,
+      { params: { limit, offset } }
+    )
     return response.data.data!
   }
 }

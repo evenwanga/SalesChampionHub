@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/ledongthuc/pdf"
+	"github.com/gen2brain/go-fitz"
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/net/html"
 )
@@ -53,14 +54,24 @@ func (p *DocumentParser) ParseFile(filePath string) (string, error) {
 	}
 }
 
-// parseTextFile reads plain text files (txt, md)
+// parseTextFile reads plain text files (txt, md) with UTF-8 encoding support
 func (p *DocumentParser) parseTextFile(filePath string) (string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
+	// Ensure content is valid UTF-8 for proper Chinese character handling
+	// Go's string() conversion assumes UTF-8, but we validate here
 	text := string(content)
+	
+	// Validate UTF-8 encoding
+	if !isValidUTF8(text) {
+		// If not valid UTF-8, try to clean it up
+		// This handles cases where file might have encoding issues
+		text = cleanInvalidUTF8(text)
+	}
+
 	if len(text) > p.maxContentLength {
 		text = text[:p.maxContentLength]
 	}
@@ -68,31 +79,50 @@ func (p *DocumentParser) parseTextFile(filePath string) (string, error) {
 	return text, nil
 }
 
-// parsePDF extracts text from PDF files
+// isValidUTF8 checks if a string is valid UTF-8
+func isValidUTF8(s string) bool {
+	for _, r := range s {
+		if r == utf8.RuneError {
+			return false
+		}
+	}
+	return true
+}
+
+// Note: cleanInvalidUTF8 is defined in document_chunker.go and shared across the package
+
+// parsePDF extracts text from PDF files with UTF-8 encoding support
+// Uses go-fitz (MuPDF binding) for better Chinese character support
 func (p *DocumentParser) parsePDF(filePath string) (string, error) {
-	file, reader, err := pdf.Open(filePath)
+	doc, err := fitz.New(filePath)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to open PDF: %v", ErrParsingFailed, err)
 	}
-	defer file.Close()
+	defer doc.Close()
 
 	var content strings.Builder
-	totalPages := reader.NumPage()
+	totalPages := doc.NumPage()
 
-	for pageNum := 1; pageNum <= totalPages; pageNum++ {
-		page := reader.Page(pageNum)
-		if page.V.IsNull() {
-			continue
-		}
-
-		text, err := page.GetPlainText(nil)
+	for pageNum := 0; pageNum < totalPages; pageNum++ {
+		// Extract text from page
+		text, err := doc.Text(pageNum)
 		if err != nil {
-			// Skip pages that fail to extract
+			// Log error but continue with other pages
 			continue
 		}
 
-		content.WriteString(text)
-		content.WriteString("\n\n")
+		// Clean and validate UTF-8 encoding for proper Chinese character handling
+		// go-fitz should handle encoding correctly, but we validate to be safe
+		if !isValidUTF8(text) {
+			text = cleanInvalidUTF8(text)
+		}
+
+		// Trim whitespace and add to content
+		text = strings.TrimSpace(text)
+		if text != "" {
+			content.WriteString(text)
+			content.WriteString("\n\n")
+		}
 
 		// Check if we've exceeded max length
 		if content.Len() > p.maxContentLength {
@@ -101,7 +131,14 @@ func (p *DocumentParser) parsePDF(filePath string) (string, error) {
 		}
 	}
 
-	return content.String(), nil
+	result := content.String()
+	
+	// Final UTF-8 validation and cleaning of the complete content
+	if !isValidUTF8(result) {
+		result = cleanInvalidUTF8(result)
+	}
+
+	return result, nil
 }
 
 // parseHTML extracts text from HTML files using proper HTML parser
@@ -296,6 +333,12 @@ func (p *DocumentParser) ParseFromReader(reader io.Reader, fileExt string) (stri
 			return "", fmt.Errorf("%w: %v", ErrParsingFailed, err)
 		}
 		text := string(content)
+		
+		// Validate and clean UTF-8 encoding
+		if !isValidUTF8(text) {
+			text = cleanInvalidUTF8(text)
+		}
+		
 		if len(text) > p.maxContentLength {
 			text = text[:p.maxContentLength]
 		}

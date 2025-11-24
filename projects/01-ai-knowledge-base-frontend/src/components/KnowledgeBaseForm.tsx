@@ -1,7 +1,23 @@
-import { Form, Input, Modal, Alert, Switch } from 'antd'
-import { useLogto } from '@logto/react'
 import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { useLogto } from '@logto/react'
 import type { KnowledgeBase, CreateKBRequest, UpdateKBRequest } from '@/types'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { User } from 'lucide-react'
 
 interface KnowledgeBaseFormProps {
   open: boolean
@@ -18,7 +34,6 @@ export const KnowledgeBaseForm: React.FC<KnowledgeBaseFormProps> = ({
   initialValues,
   loading
 }) => {
-  const [form] = Form.useForm()
   const isEditing = !!initialValues
   const { getIdTokenClaims } = useLogto()
   const [currentUser, setCurrentUser] = useState<{
@@ -27,29 +42,50 @@ export const KnowledgeBaseForm: React.FC<KnowledgeBaseFormProps> = ({
     username?: string
   } | null>(null)
 
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors }
+  } = useForm<CreateKBRequest & UpdateKBRequest>({
+    defaultValues: {
+      name: '',
+      description: '',
+      is_active: true,
+      owner_type: 'user',
+      owner_id: ''
+    }
+  })
+
+  const isActive = watch('is_active')
+
   // 根据弹窗状态和初始值同步表单内容
   useEffect(() => {
     if (!open) {
-      form.resetFields()
+      reset()
       return
     }
 
     if (isEditing && initialValues) {
-      form.setFieldsValue({
+      reset({
         name: initialValues.name,
-        description: initialValues.description,
+        description: initialValues.description || '',
         is_active: initialValues.is_active,
         owner_type: initialValues.owner_type,
         owner_id: initialValues.owner_id,
       })
     } else if (!isEditing) {
-      form.resetFields()
-      form.setFieldsValue({
+      reset({
+        name: '',
+        description: '',
         owner_type: 'user',
         is_active: true,
+        owner_id: ''
       })
     }
-  }, [open, isEditing, initialValues, form])
+  }, [open, isEditing, initialValues, reset])
 
   // 获取当前用户信息
   useEffect(() => {
@@ -64,122 +100,107 @@ export const KnowledgeBaseForm: React.FC<KnowledgeBaseFormProps> = ({
               name: userName,
               username: claims.username as string
             })
-            // 自动设置所有者ID为当前用户
-            form.setFieldsValue({
-              owner_type: 'user',
-              owner_id: claims.sub
-            })
+            setValue('owner_type', 'user')
+            setValue('owner_id', claims.sub)
           }
         } catch (error) {
           console.error('获取用户信息失败:', error)
         }
       })()
     }
-  }, [open, isEditing, getIdTokenClaims, form])
+  }, [open, isEditing, getIdTokenClaims, setValue])
 
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields()
-      await onSubmit(values)
-      form.resetFields()
-    } catch (error) {
-      if ((error as any)?.errorFields) {
-        console.error('表单验证失败:', error)
-      } else {
-        console.error('提交失败:', error)
-      }
-    }
-  }
-
-  const handleCancel = () => {
-    form.resetFields()
-    onCancel()
-  }
+  const handleFormSubmit = handleSubmit((data) => {
+    onSubmit(data)
+  })
 
   return (
-    <Modal
-      title={isEditing ? '编辑知识库' : '创建知识库'}
-      open={open}
-      onOk={handleSubmit}
-      onCancel={handleCancel}
-      confirmLoading={loading}
-      width={600}
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={initialValues || { owner_type: 'user', is_active: true }}
-      >
-        {!isEditing && currentUser && (
-          <Alert
-            message="所有者信息"
-            description={
-              <div>
-                <p style={{ margin: '8px 0 0 0' }}>
-                  <strong>当前用户：</strong>{currentUser.name}
-                  {currentUser.username && ` (@${currentUser.username})`}
-                </p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#666' }}>
-                  知识库将自动设置为您的个人知识库
+    <Dialog open={open} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? '编辑知识库' : '创建知识库'}</DialogTitle>
+          <DialogDescription>
+            {isEditing ? '修改知识库的基本信息' : '创建一个新的知识库'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleFormSubmit} className="space-y-4">
+          {!isEditing && currentUser && (
+            <Alert>
+              <User className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p>
+                    <strong>当前用户：</strong>{currentUser.name}
+                    {currentUser.username && ` (@${currentUser.username})`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    知识库将自动设置为您的个人知识库
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="name">
+              知识库名称 <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="name"
+              placeholder="例如：销售话术库"
+              {...register('name', {
+                required: '请输入知识库名称',
+                minLength: { value: 2, message: '名称至少2个字符' },
+                maxLength: { value: 100, message: '名称不能超过100个字符' }
+              })}
+            />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">描述</Label>
+            <Textarea
+              id="description"
+              placeholder="描述知识库的用途和内容..."
+              rows={4}
+              {...register('description', {
+                maxLength: { value: 500, message: '描述不能超过500个字符' }
+              })}
+            />
+            {errors.description && (
+              <p className="text-sm text-destructive">{errors.description.message}</p>
+            )}
+          </div>
+
+          {isEditing && (
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_active">状态</Label>
+                <p className="text-sm text-muted-foreground">
+                  启用后知识库可被正常使用，停用后将无法访问
                 </p>
               </div>
-            }
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-        )}
+              <Switch
+                id="is_active"
+                checked={isActive}
+                onCheckedChange={(checked) => setValue('is_active', checked)}
+              />
+            </div>
+          )}
 
-        <Form.Item
-          label="知识库名称"
-          name="name"
-          rules={[
-            { required: true, message: '请输入知识库名称' },
-            { min: 2, max: 100, message: '名称长度应在2-100个字符之间' }
-          ]}
-        >
-          <Input placeholder="例如：销售话术库" />
-        </Form.Item>
-
-        <Form.Item
-          label="描述"
-          name="description"
-          rules={[
-            { max: 500, message: '描述不能超过500个字符' }
-          ]}
-        >
-          <Input.TextArea
-            rows={4}
-            placeholder="描述知识库的用途和内容..."
-            showCount
-            maxLength={500}
-          />
-        </Form.Item>
-
-        {/* 状态开关 - 编辑时可见 */}
-        {isEditing && (
-          <Form.Item
-            label="状态"
-            name="is_active"
-            valuePropName="checked"
-            tooltip="启用后知识库可被正常使用，停用后将无法访问"
-          >
-            <Switch
-              checkedChildren="激活"
-              unCheckedChildren="停用"
-            />
-          </Form.Item>
-        )}
-
-        {/* 隐藏字段 - 自动设置为当前用户 */}
-        <Form.Item name="owner_type" hidden>
-          <Input />
-        </Form.Item>
-
-        <Form.Item name="owner_id" hidden>
-          <Input />
-        </Form.Item>
-      </Form>
-    </Modal>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              取消
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? '提交中...' : isEditing ? '更新' : '创建'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -37,7 +37,7 @@ echo ""
 
 # 构建镜像
 echo -e "${YELLOW}构建 Docker 镜像...${NC}"
-docker-compose build
+docker-compose build --no-cache
 
 # 启动容器
 echo -e "${YELLOW}启动容器...${NC}"

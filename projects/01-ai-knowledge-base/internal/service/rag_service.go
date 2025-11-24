@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/metrics"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 )
@@ -53,6 +54,9 @@ func NewRAGService(
 // Flow: Retrieve relevant documents -> Build context -> Generate answer with LLM
 func (s *RAGService) Ask(ctx context.Context, req *AskRequest) (*AskResponse, error) {
 	startTime := time.Now()
+	defer func() {
+		metrics.RecordRAGGenerationLatency(time.Since(startTime).Seconds())
+	}()
 
 	// Validate input
 	if err := req.Validate(); err != nil {

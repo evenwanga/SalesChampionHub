@@ -1,36 +1,32 @@
 import { useState, useRef, useEffect } from 'react'
-import {
-  Card,
-  Input,
-  Button,
-  Select,
-  Space,
-  Typography,
-  Switch,
-  Tag,
-  Collapse,
-  List,
-  Empty,
-  App
-} from 'antd'
-import {
-  SendOutlined,
-  RobotOutlined,
-  UserOutlined,
-  ThunderboltOutlined,
-  FileTextOutlined,
-  DeleteOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons'
+import { Send, Bot, User as UserIcon, FileText, Trash2, Clock, Zap } from 'lucide-react'
+import { format } from 'date-fns'
 import { useAccessibleKBs } from '@/hooks/useKnowledgeBases'
 import { useAsk } from '@/hooks/useRAG'
 import searchService from '@/services/searchService'
 import type { RagSource, SSEChunkEvent, SSEEvent, AskRequest } from '@/types'
 import { getErrorMessage } from '@/utils/error'
-import dayjs from 'dayjs'
+import { useToast } from '@/hooks/use-toast'
 
-const { TextArea } = Input
-const { Text, Paragraph } = Typography
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 
 interface Message {
   id: string
@@ -42,7 +38,7 @@ interface Message {
 }
 
 export const Assistant: React.FC = () => {
-  const { message } = App.useApp()
+  const { toast } = useToast()
   const [question, setQuestion] = useState('')
   const [selectedKBs, setSelectedKBs] = useState<string[]>([])
   const [topK, setTopK] = useState(5)
@@ -55,7 +51,6 @@ export const Assistant: React.FC = () => {
   const { data: kbsData = [] } = useAccessibleKBs()
   const askMutation = useAsk()
 
-  // 自动滚动到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -64,7 +59,6 @@ export const Assistant: React.FC = () => {
     scrollToBottom()
   }, [messages])
 
-  // 处理流式响应
   const handleStreamAsk = async () => {
     if (!question.trim() || selectedKBs.length === 0) return
 
@@ -138,20 +132,27 @@ export const Assistant: React.FC = () => {
             return updated
           })
         } else if (sseEvent.event === 'error') {
-          message.error('流式响应错误')
+          toast({
+            variant: 'destructive',
+            title: '错误',
+            description: '流式响应错误',
+          })
           console.error('SSE Error:', sseEvent.data)
         }
       }
     } catch (error: any) {
       const friendly = getErrorMessage(error, '问答失败')
-      message.error(friendly)
+      toast({
+        variant: 'destructive',
+        title: '错误',
+        description: friendly,
+      })
       console.error('Stream error:', error)
     } finally {
       setIsStreaming(false)
     }
   }
 
-  // 处理非流式响应
   const handleNonStreamAsk = async () => {
     if (!question.trim() || selectedKBs.length === 0) return
 
@@ -184,11 +185,14 @@ export const Assistant: React.FC = () => {
 
       setMessages(prev => [...prev, assistantMessage])
     } catch (error: any) {
-      message.error(getErrorMessage(error, '问答失败'))
+      toast({
+        variant: 'destructive',
+        title: '错误',
+        description: getErrorMessage(error, '问答失败'),
+      })
     }
   }
 
-  // 提交问题
   const handleSubmit = () => {
     if (useStream) {
       handleStreamAsk()
@@ -197,7 +201,6 @@ export const Assistant: React.FC = () => {
     }
   }
 
-  // 处理回车键
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -205,273 +208,204 @@ export const Assistant: React.FC = () => {
     }
   }
 
-  // 清空对话
   const handleClear = () => {
     setMessages([])
   }
 
-  // 渲染消息
-  const renderMessage = (msg: Message) => {
-    const isUser = msg.role === 'user'
-
-    return (
-      <div
-        key={msg.id}
-        style={{
-          display: 'flex',
-          justifyContent: isUser ? 'flex-end' : 'flex-start',
-          marginBottom: 16
-        }}
-      >
-        <div
-          style={{
-            maxWidth: '70%',
-            display: 'flex',
-            flexDirection: isUser ? 'row-reverse' : 'row',
-            gap: 12
-          }}
-        >
-          {/* 头像 */}
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: isUser ? '#667eea' : '#52c41a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              flexShrink: 0
-            }}
-          >
-            {isUser ? <UserOutlined /> : <RobotOutlined />}
-          </div>
-
-          {/* 消息内容 */}
-          <div style={{ flex: 1 }}>
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: 8,
-                background: isUser ? '#667eea' : '#f5f5f5',
-                color: isUser ? 'white' : 'inherit'
-              }}
-            >
-              <Paragraph
-                style={{
-                  margin: 0,
-                  color: isUser ? 'white' : 'inherit',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word'
-                }}
-              >
-                {msg.content || (isStreaming && !isUser ? '思考中...' : '')}
-              </Paragraph>
-            </div>
-
-            {/* 时间戳和处理时间 */}
-            <div
-              style={{
-                marginTop: 4,
-                fontSize: 12,
-                color: '#999',
-                textAlign: isUser ? 'right' : 'left'
-              }}
-            >
-              <Space size="small">
-                <ClockCircleOutlined />
-                {dayjs(msg.timestamp).format('HH:mm:ss')}
-                {msg.processingTime && (
-                  <span>· 耗时 {msg.processingTime}ms</span>
-                )}
-              </Space>
-            </div>
-
-            {/* 来源文档 */}
-            {!isUser && msg.sources && msg.sources.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <Collapse
-                  size="small"
-                  items={[
-                    {
-                      key: '1',
-                      label: (
-                        <Space>
-                          <FileTextOutlined />
-                          <Text strong>参考来源 ({msg.sources.length})</Text>
-                        </Space>
-                      ),
-                      children: (
-                        <List
-                          size="small"
-                          dataSource={msg.sources}
-                          renderItem={(source, index) => (
-                            <List.Item key={source.chunk_id}>
-                              <List.Item.Meta
-                                avatar={<Tag color="blue">#{index + 1}</Tag>}
-                                title={
-                                  <Space>
-                                    <FileTextOutlined style={{ color: '#1890ff' }} />
-                                    <Text strong>{source.filename}</Text>
-                                    <Tag color="green" icon={<ThunderboltOutlined />}>
-                                      {(source.similarity * 100).toFixed(1)}%
-                                    </Tag>
-                                  </Space>
-                                }
-                                description={
-                                  <Paragraph
-                                    ellipsis={{ rows: 2, expandable: true }}
-                                    style={{ margin: 0, fontSize: 12 }}
-                                  >
-                                    {source.content_snippet}
-                                  </Paragraph>
-                                }
-                              />
-                            </List.Item>
-                          )}
-                        />
-                      )
-                    }
-                  ]}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div style={{ padding: '0 24px', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>智能问答</h1>
-        <p style={{ color: '#666', margin: 0 }}>基于 RAG 的智能对话助手</p>
+    <div className="flex flex-col h-[calc(100vh-200px)] space-y-4">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">智能问答</h1>
+        <p className="text-muted-foreground">基于 RAG 的智能对话助手</p>
       </div>
 
       {/* 配置区域 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
-          {/* 知识库选择 */}
-          <div>
-            <div style={{ marginBottom: 8, fontWeight: 500 }}>
-              选择知识库 <span style={{ color: 'red' }}>*</span>
-            </div>
-            <Select
-              mode="multiple"
-              placeholder="请选择一个或多个知识库"
-              style={{ width: '100%' }}
-              value={selectedKBs}
-              onChange={setSelectedKBs}
-              options={kbsData.map(kb => ({
-                label: kb.name,
-                value: kb.id
-              }))}
-              maxTagCount="responsive"
-            />
-          </div>
-
-          {/* 高级选项 */}
-          <Space wrap>
-            <Space>
-              <Text>返回结果数:</Text>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="kbs">
+                选择知识库 <span className="text-destructive">*</span>
+              </Label>
               <Select
-                value={topK}
-                onChange={setTopK}
-                style={{ width: 80 }}
-                options={[
-                  { label: '3', value: 3 },
-                  { label: '5', value: 5 },
-                  { label: '10', value: 10 }
-                ]}
-              />
-            </Space>
-            <Space>
-              <Text>显示来源:</Text>
-              <Switch checked={includeSources} onChange={setIncludeSources} />
-            </Space>
-            <Space>
-              <Text>流式响应:</Text>
-              <Switch checked={useStream} onChange={setUseStream} />
-            </Space>
-            <Button
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={handleClear}
-              disabled={messages.length === 0}
-            >
-              清空对话
-            </Button>
-          </Space>
-        </Space>
+                value={selectedKBs[0]}
+                onValueChange={(value) => setSelectedKBs([value])}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="请选择知识库" />
+                </SelectTrigger>
+                <SelectContent>
+                  {kbsData.map(kb => (
+                    <SelectItem key={kb.id} value={kb.id}>{kb.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="topK">返回结果数:</Label>
+                <Select value={String(topK)} onValueChange={(v) => setTopK(Number(v))}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3</SelectItem>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="includeSources">显示来源:</Label>
+                <Switch
+                  id="includeSources"
+                  checked={includeSources}
+                  onCheckedChange={setIncludeSources}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="useStream">流式响应:</Label>
+                <Switch
+                  id="useStream"
+                  checked={useStream}
+                  onCheckedChange={setUseStream}
+                />
+              </div>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleClear}
+                disabled={messages.length === 0}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                清空对话
+              </Button>
+            </div>
+          </div>
+        </CardContent>
       </Card>
 
       {/* 对话区域 */}
-      <Card
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          marginBottom: 16,
-          overflow: 'hidden'
-        }}
-        bodyStyle={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '24px 16px'
-        }}
-      >
-        {messages.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              <Space direction="vertical" style={{ textAlign: 'center' }}>
-                <RobotOutlined style={{ fontSize: 48, color: '#52c41a' }} />
-                <Text>你好!我是AI助手,基于你的知识库回答问题</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  请选择知识库后开始提问
-                </Text>
-              </Space>
-            }
-            style={{ marginTop: '20%' }}
-          />
-        ) : (
-          <>
-            {messages.map(renderMessage)}
-            <div ref={messagesEndRef} />
-          </>
-        )}
+      <Card className="flex-1 flex flex-col overflow-hidden">
+        <CardHeader>
+          <CardTitle>对话记录</CardTitle>
+        </CardHeader>
+        <ScrollArea className="flex-1 px-6">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center py-12">
+              <Bot className="h-16 w-16 text-green-500 mb-4" />
+              <h3 className="text-lg font-medium mb-2">你好！我是AI助手</h3>
+              <p className="text-sm text-muted-foreground max-w-md">
+                基于你的知识库回答问题。请选择知识库后开始提问
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 pb-4">
+              {messages.map((msg) => {
+                const isUser = msg.role === 'user'
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {!isUser && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500 text-white">
+                        <Bot className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className={`flex flex-col gap-2 max-w-[70%] ${isUser ? 'items-end' : 'items-start'}`}>
+                      <div
+                        className={`rounded-lg px-4 py-3 ${
+                          isUser
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                          {msg.content || (isStreaming && !isUser ? '思考中...' : '')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {format(msg.timestamp, 'HH:mm:ss')}
+                        {msg.processingTime && (
+                          <span>· 耗时 {msg.processingTime}ms</span>
+                        )}
+                      </div>
+                      {!isUser && msg.sources && msg.sources.length > 0 && (
+                        <Collapsible className="w-full">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="outline" size="sm" className="w-full">
+                              <FileText className="mr-2 h-4 w-4" />
+                              参考来源 ({msg.sources.length})
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 space-y-2">
+                            {msg.sources.map((source, index) => (
+                              <Card key={source.chunk_id} className="text-xs">
+                                <CardContent className="p-3 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline">#{index + 1}</Badge>
+                                    <FileText className="h-3 w-3 text-blue-500" />
+                                    <span className="font-medium">{source.filename}</span>
+                                    <Badge variant="secondary" className="ml-auto">
+                                      <Zap className="mr-1 h-3 w-3" />
+                                      {(source.similarity * 100).toFixed(1)}%
+                                    </Badge>
+                                  </div>
+                                  <p className="text-muted-foreground line-clamp-2">
+                                    {source.content_snippet}
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+                    </div>
+                    {isUser && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <UserIcon className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
       </Card>
 
       {/* 输入区域 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space.Compact style={{ width: '100%' }}>
-          <TextArea
-            placeholder="输入你的问题...&#10;例如：如何提高销售转化率？"
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            onKeyPress={handleKeyPress}
-            autoSize={{ minRows: 2, maxRows: 6 }}
-            style={{ fontSize: 14 }}
-            disabled={selectedKBs.length === 0 || isStreaming || askMutation.isPending}
-          />
-          <Button
-            type="primary"
-            size="large"
-            icon={<SendOutlined />}
-            onClick={handleSubmit}
-            loading={isStreaming || askMutation.isPending}
-            disabled={!question.trim() || selectedKBs.length === 0}
-            style={{ height: 'auto' }}
-          >
-            发送
-          </Button>
-        </Space.Compact>
-        <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>
-          💡 提示：按 Enter 键发送，Shift + Enter 换行
-        </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-2">
+            <Textarea
+              placeholder="输入你的问题... (Enter 发送, Shift + Enter 换行)"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyPress={handleKeyPress}
+              rows={2}
+              disabled={selectedKBs.length === 0 || isStreaming || askMutation.isPending}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleSubmit}
+              disabled={!question.trim() || selectedKBs.length === 0 || isStreaming || askMutation.isPending}
+              size="lg"
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            💡 提示：按 Enter 键发送，Shift + Enter 换行
+          </p>
+        </CardContent>
       </Card>
     </div>
   )

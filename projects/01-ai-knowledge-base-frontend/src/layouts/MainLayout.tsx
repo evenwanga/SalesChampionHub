@@ -1,29 +1,87 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { Layout, Menu, Avatar, Dropdown, theme, Breadcrumb, Typography } from 'antd'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  DashboardOutlined,
-  DatabaseOutlined,
-  FileTextOutlined,
-  SearchOutlined,
-  CommentOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  HomeOutlined,
-  RobotOutlined
-} from '@ant-design/icons'
-import type { MenuProps } from 'antd'
+  Database,
+  FileText,
+  Search,
+  MessageSquare,
+  LayoutDashboard,
+  User,
+  LogOut,
+  Bot,
+  ChevronDown,
+  Shield,
+  Activity,
+  BarChart3,
+} from 'lucide-react'
 import { useLogto } from '@logto/react'
 
-const { Header, Content, Sider } = Layout
-const { Text } = Typography
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
+
+interface NavItem {
+  title: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
+const navItems: NavItem[] = [
+  {
+    title: '工作台',
+    href: '/',
+    icon: LayoutDashboard,
+  },
+  {
+    title: '知识库',
+    href: '/knowledge-bases',
+    icon: Database,
+  },
+  {
+    title: '文档管理',
+    href: '/documents',
+    icon: FileText,
+  },
+  {
+    title: '语义搜索',
+    href: '/search',
+    icon: Search,
+  },
+  {
+    title: '智能问答',
+    href: '/assistant',
+    icon: MessageSquare,
+  },
+  {
+    title: '统计分析',
+    href: '/analytics',
+    icon: BarChart3,
+  },
+  {
+    title: '审计日志',
+    href: '/audit-logs',
+    icon: Shield,
+  },
+  {
+    title: '性能监控',
+    href: '/monitoring',
+    icon: Activity,
+  },
+]
 
 export const MainLayout: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(false)
   const [username, setUsername] = useState<string>('用户')
   const navigate = useNavigate()
   const location = useLocation()
-  const { token } = theme.useToken()
 
   const { signOut, getIdTokenClaims } = useLogto()
   const userInfoFetchedRef = useRef(false)
@@ -47,177 +105,96 @@ export const MainLayout: React.FC = () => {
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])  // 空依赖数组，只在组件挂载时执行一次
+  }, []) // 空依赖数组，只在组件挂载时执行一次
 
   const handleLogout = async () => {
-    const postLogoutRedirectUri = import.meta.env.VITE_LOGTO_POST_LOGOUT_REDIRECT_URI || 'http://localhost:3000'
+    const postLogoutRedirectUri =
+      import.meta.env.VITE_LOGTO_POST_LOGOUT_REDIRECT_URI || 'http://localhost:3000'
     await signOut(postLogoutRedirectUri)
   }
 
-  // Menu items
-  const menuItems: MenuProps['items'] = [
-    {
-      key: '/',
-      icon: <DashboardOutlined />,
-      label: '工作台',
-    },
-    {
-      key: '/knowledge-bases',
-      icon: <DatabaseOutlined />,
-      label: '知识库',
-    },
-    {
-      key: '/documents',
-      icon: <FileTextOutlined />,
-      label: '文档管理',
-    },
-    {
-      key: '/search',
-      icon: <SearchOutlined />,
-      label: '语义搜索',
-    },
-    {
-      key: '/assistant',
-      icon: <CommentOutlined />,
-      label: '智能问答',
-    },
-  ]
-
-  // User dropdown menu
-  const userMenuItems: MenuProps['items'] = [
-    {
-      key: 'profile',
-      icon: <UserOutlined />,
-      label: '个人资料',
-    },
-    {
-      type: 'divider',
-    },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout,
-    },
-  ]
-
-  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
-    navigate(key)
+  const getUserInitials = (name: string) => {
+    return name.substring(0, 2).toUpperCase()
   }
 
-  // 面包屑导航 - 使用 useMemo 缓存结果，避免重复计算
-  const breadcrumbs = useMemo(() => {
-    const pathMap: Record<string, { title: string; icon: React.ReactNode }> = {
-      '/': { title: '工作台', icon: <DashboardOutlined /> },
-      '/knowledge-bases': { title: '知识库', icon: <DatabaseOutlined /> },
-      '/documents': { title: '文档管理', icon: <FileTextOutlined /> },
-      '/search': { title: '语义搜索', icon: <SearchOutlined /> },
-      '/assistant': { title: '智能问答', icon: <CommentOutlined /> }
-    }
-
-    const current = pathMap[location.pathname]
-    if (!current) return []
-
-    if (location.pathname === '/') {
-      return [{ title: <><HomeOutlined /> 工作台</> }]
-    }
-
-    return [
-      { title: <><HomeOutlined /> 首页</>, href: '/' },
-      { title: <>{current.icon} {current.title}</> }
-    ]
-  }, [location.pathname])
-
   return (
-    <Layout style={{ minHeight: '100vh', height: '100vh' }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        theme="dark"
-        width={256}
-        style={{
-          overflow: 'auto',
-          height: '100vh',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          bottom: 0,
-        }}
-      >
-        <div
-          style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontSize: collapsed ? 14 : 18,
-            fontWeight: 'bold',
-            gap: 8,
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
-          }}
-        >
-          <RobotOutlined style={{ fontSize: collapsed ? 18 : 24 }} />
-          {!collapsed && <Text style={{ color: 'white', fontSize: 18, fontWeight: 600 }}>AI知识库</Text>}
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar */}
+      <aside className="hidden w-64 flex-col border-r bg-background md:flex">
+        <div className="flex h-16 items-center gap-2 border-b px-6">
+          <Bot className="h-6 w-6 text-primary" />
+          <h1 className="text-xl font-semibold">AI知识库</h1>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ borderRight: 0 }}
-        />
-      </Sider>
+        <ScrollArea className="flex-1 px-3 py-4">
+          <nav className="flex flex-col gap-1">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = location.pathname === item.href
+              return (
+                <Button
+                  key={item.href}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className={cn(
+                    'w-full justify-start gap-3',
+                    isActive && 'bg-secondary font-medium'
+                  )}
+                  onClick={() => navigate(item.href)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.title}
+                </Button>
+              )
+            })}
+          </nav>
+        </ScrollArea>
+      </aside>
 
-      <Layout style={{ marginLeft: collapsed ? 80 : 256, transition: 'margin-left 0.2s' }}>
-        <Header
-          style={{
-            padding: '0 32px',
-            background: token.colorBgContainer,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            boxShadow: '0 1px 4px rgba(0, 21, 41, 0.08)',
-          }}
-        >
-          <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 14 }}>{username}</span>
-              <Avatar size="default" icon={<UserOutlined />} />
+      {/* Main content */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <header className="flex h-16 items-center justify-between border-b bg-background px-6">
+          <div className="flex items-center gap-4">
+            {/* 移动端显示标题 */}
+            <div className="flex items-center gap-2 md:hidden">
+              <Bot className="h-6 w-6 text-primary" />
+              <h1 className="text-lg font-semibold">AI知识库</h1>
             </div>
-          </Dropdown>
-        </Header>
+          </div>
 
-        <Content
-          style={{
-            margin: '24px 24px 0',
-            overflow: 'auto',
-            height: 'calc(100vh - 64px)',
-          }}
-        >
-          {breadcrumbs.length > 0 && (
-            <Breadcrumb
-              style={{ marginBottom: 16 }}
-              items={breadcrumbs}
-            />
-          )}
-          <div
-            style={{
-              padding: 24,
-              minHeight: 'calc(100vh - 64px - 48px)',
-              background: token.colorBgContainer,
-              borderRadius: token.borderRadiusLG,
-            }}
-          >
+          <div className="flex items-center gap-4">
+            {/* User menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>{getUserInitials(username)}</AvatarFallback>
+                  </Avatar>
+                  <span className="hidden text-sm md:inline-block">{username}</span>
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem>
+                  <User className="mr-2 h-4 w-4" />
+                  <span>个人资料</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>退出登录</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-auto bg-muted/30">
+          <div className="container mx-auto p-6">
             <Outlet />
           </div>
-        </Content>
-      </Layout>
-    </Layout>
+        </main>
+      </div>
+    </div>
   )
 }

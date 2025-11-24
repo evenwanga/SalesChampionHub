@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"unicode/utf8"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
@@ -69,8 +70,13 @@ func (p *DocumentProcessor) ProcessDocument(ctx context.Context, docID string) e
 		return fmt.Errorf("failed to parse document: %w", err)
 	}
 
+	// Clean content for PostgreSQL storage (remove invalid UTF-8 characters)
+	// Note: The chunker will also clean the text, but we need to clean here too
+	// to avoid errors when storing the full content in the database
+	cleanedContent := cleanTextForPostgres(content)
+	
 	// Update document with extracted content
-	doc.Content = content
+	doc.Content = cleanedContent
 	if err := p.docRepo.Update(ctx, doc); err != nil {
 		log.Printf("Warning: failed to update document content: %v", err)
 	}
@@ -85,17 +91,39 @@ func (p *DocumentProcessor) ProcessDocument(ctx context.Context, docID string) e
 
 	log.Printf("📦 Generated %d chunks", len(chunks))
 
-	// Step 3: Generate embeddings for all chunks
-	log.Printf("🧮 Generating embeddings for %d chunks using model: %s", len(chunks), p.embedClient.GetModel())
-	embeddings, err := p.embedClient.EmbedBatch(ctx, chunks)
-	if err != nil {
-		_ = p.docRepo.UpdateStatus(ctx, docID, "failed", false)
-		return fmt.Errorf("failed to generate embeddings: %w", err)
+	// Step 3: Generate embeddings for all chunks in batches
+	// Process in batches to avoid connection issues with large documents
+	batchSize := 50 // Process 50 chunks at a time
+	log.Printf("🧮 Generating embeddings for %d chunks using model: %s (batch size: %d)", len(chunks), p.embedClient.GetModel(), batchSize)
+	
+	var allEmbeddings [][]float32
+	for i := 0; i < len(chunks); i += batchSize {
+		end := i + batchSize
+		if end > len(chunks) {
+			end = len(chunks)
+		}
+		
+		batch := chunks[i:end]
+		log.Printf("  Processing batch %d-%d (%d chunks)...", i+1, end, len(batch))
+		
+		batchEmbeddings, err := p.embedClient.EmbedBatch(ctx, batch)
+		if err != nil {
+			_ = p.docRepo.UpdateStatus(ctx, docID, "failed", false)
+			return fmt.Errorf("failed to generate embeddings for batch %d-%d: %w", i+1, end, err)
+		}
+		
+		if len(batchEmbeddings) != len(batch) {
+			_ = p.docRepo.UpdateStatus(ctx, docID, "failed", false)
+			return fmt.Errorf("embedding count mismatch for batch %d-%d: got %d, expected %d", i+1, end, len(batchEmbeddings), len(batch))
+		}
+		
+		allEmbeddings = append(allEmbeddings, batchEmbeddings...)
 	}
-
+	
+	embeddings := allEmbeddings
 	if len(embeddings) != len(chunks) {
 		_ = p.docRepo.UpdateStatus(ctx, docID, "failed", false)
-		return fmt.Errorf("embedding count mismatch: got %d, expected %d", len(embeddings), len(chunks))
+		return fmt.Errorf("total embedding count mismatch: got %d, expected %d", len(embeddings), len(chunks))
 	}
 
 	// Step 4: Store chunks and vectors
@@ -197,4 +225,36 @@ func (p *DocumentProcessor) GetProcessingStats(ctx context.Context, kbID string)
 	// This would need additional repository methods to implement
 	// For now, return a placeholder
 	return &ProcessingStats{}, nil
+}
+
+// cleanTextForPostgres removes invalid UTF-8 characters that PostgreSQL cannot store
+func cleanTextForPostgres(text string) string {
+	runes := []rune(text)
+	cleaned := make([]rune, 0, len(runes))
+
+	for _, r := range runes {
+		// Skip null bytes (0x00) - PostgreSQL cannot store these
+		if r == 0 {
+			continue
+		}
+
+		// Skip other control characters except newline, tab, and carriage return
+		if r < 32 && r != '\n' && r != '\t' && r != '\r' {
+			continue
+		}
+
+		// Skip invalid Unicode characters
+		if r == utf8.RuneError {
+			continue
+		}
+
+		// Skip Unicode replacement character (often indicates encoding issues)
+		if r == '\uFFFD' {
+			continue
+		}
+
+		cleaned = append(cleaned, r)
+	}
+
+	return string(cleaned)
 }

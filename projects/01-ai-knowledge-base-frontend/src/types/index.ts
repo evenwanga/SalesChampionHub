@@ -159,6 +159,33 @@ export interface BatchDeleteResponse {
   failed_ids?: string[]
 }
 
+export interface BatchUpdateStatusRequest {
+  document_ids: string[]
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  set_processed_at?: boolean
+  trigger_reprocess?: boolean
+}
+
+export interface BatchUpdateStatusResponse {
+  success_count: number
+  failed_count: number
+  failed_ids?: string[]
+  errors?: string[]
+}
+
+// Document Preview Types
+export interface DocumentPreview {
+  document_id: string
+  filename: string
+  file_type: string
+  file_size: number
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  content: string
+  chunk_count: number
+  processed_at?: string
+  created_at: string
+}
+
 // Chunk Types
 export interface Chunk {
   id: string
@@ -169,6 +196,24 @@ export interface Chunk {
   token_count: number
   metadata: Record<string, unknown>
   created_at: string
+}
+
+export interface ChunkStats {
+  total_chunks: number
+  avg_chunk_size: number
+  min_chunk_size: number
+  max_chunk_size: number
+  total_tokens: number
+}
+
+export interface DocumentChunksResponse {
+  document_id: string
+  document_name: string
+  chunks: Chunk[]
+  total: number
+  limit: number
+  offset: number
+  stats?: ChunkStats
 }
 
 // Search and RAG Types

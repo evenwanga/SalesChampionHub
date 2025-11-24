@@ -1,8 +1,19 @@
 # 多阶段构建：编译阶段
+# 使用Alpine以支持go-fitz（musl libc避免glibc兼容性问题）
 FROM golang:1.25.3-alpine AS builder
 
-# 安装必要的构建工具
-RUN apk add --no-cache git
+# 启用Go工具链自动下载以支持go.mod中指定的版本
+ENV GOTOOLCHAIN=auto
+
+# 安装必要的构建工具和MuPDF开发库
+# go-fitz需要CGO和MuPDF C库支持
+RUN apk add --no-cache \
+  git \
+  gcc \
+  g++ \
+  musl-dev \
+  mupdf-dev \
+  pkgconfig
 
 # 设置工作目录
 WORKDIR /app
@@ -22,14 +33,20 @@ COPY . .
 # 生成Swagger文档
 RUN /go/bin/swag init -g cmd/server/main.go -o docs/swagger
 
-# 编译应用
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/server ./cmd/server
+# 编译应用（启用CGO以支持go-fitz）
+# 使用extlib构建标签以使用系统安装的MuPDF库，而不是预编译库
+RUN CGO_ENABLED=1 GOOS=linux go build -tags extlib -a -o bin/server ./cmd/server
 
-# 运行阶段：使用更小的镜像
+# 运行阶段：使用Alpine镜像（更小且兼容）
 FROM alpine:latest
 
-# 安装CA证书和wget（用于健康检查）
-RUN apk --no-cache add ca-certificates wget
+# 安装运行时依赖：MuPDF库、CA证书和wget（用于健康检查）
+# go-fitz运行时需要MuPDF库
+RUN apk --no-cache add \
+  mupdf \
+  ca-certificates \
+  wget \
+  font-noto-cjk
 
 WORKDIR /root/
 

@@ -22,6 +22,382 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/audit-logs": {
+            "get": {
+                "description": "查询审计日志，支持多种过滤条件",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "查询审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "租户ID",
+                        "name": "tenant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "操作类型",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "资源类型",
+                        "name": "resource_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "资源ID",
+                        "name": "resource_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间",
+                        "name": "end_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/audit-logs/export": {
+            "get": {
+                "description": "导出审计日志为CSV或JSON格式",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "导出审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "导出格式（csv/json）",
+                        "name": "format",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "租户ID",
+                        "name": "tenant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "操作类型",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "资源类型",
+                        "name": "resource_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "开始时间",
+                        "name": "start_time",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束时间",
+                        "name": "end_time",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/audit-logs/stats": {
+            "get": {
+                "description": "获取指定租户的审计统计信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取租户审计统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "统计天数（默认30天）",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditLogStats"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/audit-logs/users/{user_id}/stats": {
+            "get": {
+                "description": "获取指定用户的审计统计信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取用户审计统计",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "统计天数（默认30天）",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.UserAuditStats"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/audit-logs/{id}": {
+            "get": {
+                "description": "根据ID获取审计日志详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "审计日志"
+                ],
+                "summary": "获取审计日志详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "审计日志ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditLog"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/system/metrics": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前时刻的关键性能指标快照",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "监控"
+                ],
+                "summary": "获取指标快照",
+                "responses": {
+                    "200": {
+                        "description": "指标快照",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/system/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取详细的系统状态信息，包括CPU、内存、磁盘、网络等指标",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "监控"
+                ],
+                "summary": "获取系统状态",
+                "responses": {
+                    "200": {
+                        "description": "系统状态信息",
+                        "schema": {
+                            "$ref": "#/definitions/handler.SystemStatusResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/ask": {
             "post": {
                 "security": [
@@ -395,6 +771,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/documents/batch-update-status": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update status for multiple documents at once",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "Batch update document status",
+                "parameters": [
+                    {
+                        "description": "Batch status update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.BatchUpdateStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.BatchUpdateStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/documents/{id}": {
             "get": {
                 "security": [
@@ -497,6 +936,188 @@ const docTemplate = `{
                 }
             }
         },
+        "/documents/{id}/chunks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all chunks for a document with pagination",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "List document chunks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Number of results per page",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.DocumentChunksResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/documents/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Download the original uploaded document file",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "Download document",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Document file",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/documents/{id}/preview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get the extracted text content of a document",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "Preview document content",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.DocumentPreviewResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/documents/{id}/status": {
             "put": {
                 "security": [
@@ -566,6 +1187,144 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embedding": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将文本转换为1024维向量，用于语义搜索和RAG问答。使用BGE-large-zh模型",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "向量化"
+                ],
+                "summary": "生成文本向量",
+                "parameters": [
+                    {
+                        "description": "文本向量化请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.EmbeddingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "向量生成成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.EmbeddingResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embeddings/batch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "批量将多个文本转换为向量，提高处理效率",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "向量化"
+                ],
+                "summary": "批量生成文本向量",
+                "parameters": [
+                    {
+                        "description": "批量文本向量化请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.BatchEmbeddingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量向量生成成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.BatchEmbeddingResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/middleware.ErrorResponse"
                         }
@@ -988,6 +1747,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/knowledge-bases/{id}/mounts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定知识库的所有挂载记录，包括租户、组织和用户级别的挂载",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识库挂载"
+                ],
+                "summary": "获取知识库的挂载列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "知识库ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "挂载列表",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "mounts": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/models.KnowledgeBaseMount"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "知识库ID必填",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/knowledge-bases/{id}/stats": {
             "get": {
                 "security": [
@@ -1046,6 +1880,92 @@ const docTemplate = `{
                         "description": "知识库ID必填",
                         "schema": {
                             "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mounts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取挂载列表，支持按类型、租户ID、组织ID、用户ID过滤",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识库挂载"
+                ],
+                "summary": "获取挂载列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "挂载类型（tenant/organization/user）",
+                        "name": "mount_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "租户ID",
+                        "name": "tenant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "组织ID",
+                        "name": "organization_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "挂载列表",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "mounts": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/models.KnowledgeBaseMount"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "401": {
@@ -1286,6 +2206,74 @@ const docTemplate = `{
             }
         },
         "/mounts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取单个挂载记录的详细信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识库挂载"
+                ],
+                "summary": "获取挂载详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "挂载ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "挂载详情",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.KnowledgeBaseMount"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "挂载ID无效",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "挂载不存在",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
@@ -1335,6 +2323,93 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "挂载ID无效",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "挂载不存在",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mounts/{id}/permissions": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新指定挂载的权限设置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "知识库挂载"
+                ],
+                "summary": "更新挂载权限",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "挂载ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "权限更新请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.UpdateMountPermissionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "权限更新成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/middleware.ErrorResponse"
                         }
@@ -1455,7 +2530,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取租户的查询统计信息，包括总查询数、独立用户数、平均延迟等",
+                "description": "获取租户的查询统计信息，支持按日/周/月分组统计",
                 "produces": [
                     "application/json"
                 ],
@@ -1466,22 +2541,29 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "2025-10-27T00:00:00Z",
-                        "description": "开始时间（RFC3339格式，默认：7天前）",
-                        "name": "start_time",
+                        "default": "2025-11-05",
+                        "description": "开始日期（YYYY-MM-DD格式，默认：7天前）",
+                        "name": "start_date",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "default": "2025-11-03T00:00:00Z",
-                        "description": "结束时间（RFC3339格式，默认：现在）",
-                        "name": "end_time",
+                        "default": "2025-11-12",
+                        "description": "结束日期（YYYY-MM-DD格式，默认：今天）",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "day",
+                        "description": "分组方式：day/week/month（默认：day）",
+                        "name": "group_by",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "查询统计",
+                        "description": "分组查询统计",
                         "schema": {
                             "allOf": [
                                 {
@@ -1491,7 +2573,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/repository.QueryStats"
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/repository.QueryStatsGrouped"
+                                            }
                                         }
                                     }
                                 }
@@ -1650,6 +2735,69 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/user/mounts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前用户通过租户、组织和个人级别可访问的所有知识库挂载",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户相关"
+                ],
+                "summary": "获取当前用户的所有挂载",
+                "responses": {
+                    "200": {
+                        "description": "用户挂载列表",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/middleware.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "breakdown": {
+                                                    "type": "object"
+                                                },
+                                                "mounts": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/definitions/models.KnowledgeBaseMount"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1689,8 +2837,347 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.BatchEmbeddingRequest": {
+            "type": "object",
+            "required": [
+                "texts"
+            ],
+            "properties": {
+                "texts": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "handler.BatchEmbeddingResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "dimension": {
+                    "type": "integer",
+                    "example": 1024
+                },
+                "embeddings": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "number",
+                            "format": "float32"
+                        }
+                    }
+                },
+                "model": {
+                    "type": "string",
+                    "example": "BAAI/bge-large-zh-v1.5"
+                }
+            }
+        },
+        "handler.BatchUpdateStatusRequest": {
+            "type": "object",
+            "required": [
+                "document_ids",
+                "status"
+            ],
+            "properties": {
+                "document_ids": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "set_processed_at": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "processing",
+                        "completed",
+                        "failed"
+                    ]
+                },
+                "trigger_reprocess": {
+                    "description": "Only for pending status",
+                    "type": "boolean"
+                }
+            }
+        },
+        "handler.BatchUpdateStatusResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "failed_count": {
+                    "type": "integer"
+                },
+                "failed_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "success_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handler.CPUMetrics": {
+            "type": "object",
+            "properties": {
+                "cores": {
+                    "type": "integer"
+                },
+                "usage_percent": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.DiskMetrics": {
+            "type": "object",
+            "properties": {
+                "free": {
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "used": {
+                    "type": "integer"
+                },
+                "used_percent": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.DocumentChunksResponse": {
+            "type": "object",
+            "properties": {
+                "chunks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DocumentChunk"
+                    }
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "document_name": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "stats": {
+                    "$ref": "#/definitions/repository.ChunkStats"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handler.DocumentPreviewResponse": {
+            "type": "object",
+            "properties": {
+                "chunk_count": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "file_size": {
+                    "type": "integer"
+                },
+                "file_type": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "processed_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.EmbeddingRequest": {
+            "type": "object",
+            "required": [
+                "text"
+            ],
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "example": "如何使用AI知识库进行语义搜索？"
+                }
+            }
+        },
+        "handler.EmbeddingResponse": {
+            "type": "object",
+            "properties": {
+                "dimension": {
+                    "type": "integer",
+                    "example": 1024
+                },
+                "embedding": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "model": {
+                    "type": "string",
+                    "example": "BAAI/bge-large-zh-v1.5"
+                }
+            }
+        },
+        "handler.MemoryMetrics": {
+            "type": "object",
+            "properties": {
+                "free": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "used": {
+                    "type": "integer"
+                },
+                "used_percent": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.NetworkMetrics": {
+            "type": "object",
+            "properties": {
+                "bytes_recv": {
+                    "type": "integer"
+                },
+                "bytes_sent": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handler.RuntimeMetrics": {
+            "type": "object",
+            "properties": {
+                "go_version": {
+                    "type": "string"
+                },
+                "goroutines": {
+                    "type": "integer"
+                },
+                "last_gc_time": {
+                    "type": "string"
+                },
+                "mem_alloc_mb": {
+                    "type": "integer"
+                },
+                "mem_total_mb": {
+                    "type": "integer"
+                },
+                "num_cpu": {
+                    "type": "integer"
+                },
+                "num_gc": {
+                    "type": "integer"
+                }
+            }
+        },
         "handler.SearchRequestBody": {
             "type": "object"
+        },
+        "handler.ServiceInfo": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "latency": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.SystemMetrics": {
+            "type": "object",
+            "properties": {
+                "cpu": {
+                    "$ref": "#/definitions/handler.CPUMetrics"
+                },
+                "disk": {
+                    "$ref": "#/definitions/handler.DiskMetrics"
+                },
+                "memory": {
+                    "$ref": "#/definitions/handler.MemoryMetrics"
+                },
+                "network": {
+                    "$ref": "#/definitions/handler.NetworkMetrics"
+                }
+            }
+        },
+        "handler.SystemStatusResponse": {
+            "type": "object",
+            "properties": {
+                "runtime": {
+                    "$ref": "#/definitions/handler.RuntimeMetrics"
+                },
+                "services": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/handler.ServiceInfo"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "system": {
+                    "$ref": "#/definitions/handler.SystemMetrics"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "uptime": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
         },
         "handler.UpdateDocumentStatusRequest": {
             "type": "object",
@@ -1709,6 +3196,17 @@ const docTemplate = `{
                         "completed",
                         "failed"
                     ]
+                }
+            }
+        },
+        "handler.UpdateMountPermissionsRequest": {
+            "type": "object",
+            "required": [
+                "permissions"
+            ],
+            "properties": {
+                "permissions": {
+                    "$ref": "#/definitions/models.JSONMap"
                 }
             }
         },
@@ -1795,6 +3293,91 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AuditDetails": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "models.AuditLog": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "details": {
+                    "$ref": "#/definitions/models.AuditDetails"
+                },
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip_address": {
+                    "type": "string"
+                },
+                "request_method": {
+                    "type": "string"
+                },
+                "request_path": {
+                    "type": "string"
+                },
+                "resource_id": {
+                    "type": "string"
+                },
+                "resource_type": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AuditLogStats": {
+            "type": "object",
+            "properties": {
+                "success_rate": {
+                    "type": "number"
+                },
+                "top_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                },
+                "top_users": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                },
+                "total_operations": {
+                    "type": "integer"
+                },
+                "unique_users": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.Document": {
             "type": "object",
             "properties": {
@@ -1857,6 +3440,43 @@ const docTemplate = `{
                 }
             }
         },
+        "models.DocumentChunk": {
+            "type": "object",
+            "properties": {
+                "chunk_index": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "content_length": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "document": {
+                    "description": "Relations",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Document"
+                        }
+                    ]
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kb_id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "$ref": "#/definitions/models.JSONMap"
+                }
+            }
+        },
         "models.JSONMap": {
             "type": "object",
             "additionalProperties": true
@@ -1878,6 +3498,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
                 },
                 "last_updated_at": {
                     "type": "string"
@@ -1984,6 +3607,9 @@ const docTemplate = `{
                 "query_text": {
                     "type": "string"
                 },
+                "query_type": {
+                    "type": "string"
+                },
                 "result_count": {
                     "type": "integer"
                 },
@@ -1998,27 +3624,71 @@ const docTemplate = `{
                 }
             }
         },
-        "repository.QueryStats": {
+        "models.UserAuditStats": {
             "type": "object",
             "properties": {
-                "avg_latency_ms": {
-                    "type": "number"
+                "error_count": {
+                    "type": "integer"
                 },
-                "top_kbs": {
-                    "description": "KB ID -\u003e query count",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
+                "failure_count": {
+                    "type": "integer"
+                },
+                "success_count": {
+                    "type": "integer"
+                },
+                "top_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
                     }
                 },
+                "total_operations": {
+                    "type": "integer"
+                }
+            }
+        },
+        "repository.ChunkStats": {
+            "type": "object",
+            "properties": {
+                "avg_chunk_size": {
+                    "type": "number"
+                },
+                "max_chunk_size": {
+                    "type": "integer"
+                },
+                "min_chunk_size": {
+                    "type": "integer"
+                },
+                "total_chunks": {
+                    "type": "integer"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "repository.QueryStatsGrouped": {
+            "type": "object",
+            "properties": {
+                "ask_count": {
+                    "description": "Ask-type queries",
+                    "type": "integer"
+                },
+                "avg_processing_time_ms": {
+                    "description": "Average processing time",
+                    "type": "number"
+                },
+                "period": {
+                    "description": "Date period (YYYY-MM-DD)",
+                    "type": "string"
+                },
+                "search_count": {
+                    "description": "Search-type queries",
+                    "type": "integer"
+                },
                 "total_queries": {
-                    "type": "integer"
-                },
-                "total_results": {
-                    "type": "integer"
-                },
-                "unique_users": {
+                    "description": "Total queries in period",
                     "type": "integer"
                 }
             }
@@ -2098,7 +3768,8 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "name",
-                "owner_id"
+                "owner_id",
+                "owner_type"
             ],
             "properties": {
                 "description": {
@@ -2107,7 +3778,15 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "organization_id": {
+                    "description": "From context, set by handler",
+                    "type": "string"
+                },
                 "owner_id": {
+                    "type": "string"
+                },
+                "owner_type": {
+                    "description": "tenant, organization, user",
                     "type": "string"
                 },
                 "settings": {
@@ -2118,6 +3797,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "tenant_id": {
+                    "description": "From context, set by handler",
+                    "type": "string"
                 },
                 "visibility": {
                     "description": "public, private, shared",
@@ -2204,6 +3887,9 @@ const docTemplate = `{
             "properties": {
                 "description": {
                     "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"

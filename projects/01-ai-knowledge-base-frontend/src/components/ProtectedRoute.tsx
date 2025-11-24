@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useLogto } from '@logto/react'
-import { Spin } from 'antd'
 import { useEffect, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 
 type WindowWithLogto = Window & {
   __logtoAccessToken?: string
@@ -22,9 +22,34 @@ interface ProtectedRouteProps {
  * Ensures Logto API access token is fetched once before rendering children
  */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading, getAccessToken } = useLogto()
+  const { isAuthenticated, isLoading, getAccessToken, signOut } = useLogto()
   const [tokenReady, setTokenReady] = useState(false)
   const refreshTimerRef = useRef<number>()
+  const [forceLogout, setForceLogout] = useState(false)
+
+  // 监听 API 401 错误事件
+  useEffect(() => {
+    const handleUnauthorized = (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.error('Unauthorized access detected:', customEvent.detail)
+      
+      // 清除 token 并强制登出
+      setGlobalAccessToken(undefined)
+      setTokenReady(false)
+      setForceLogout(true)
+      
+      // 执行登出操作
+      const postLogoutRedirectUri = 
+        import.meta.env.VITE_LOGTO_POST_LOGOUT_REDIRECT_URI || 'http://localhost:3000'
+      void signOut(postLogoutRedirectUri)
+    }
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized)
+    
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized)
+    }
+  }, [signOut])
 
   useEffect(() => {
     const apiResource = import.meta.env.VITE_LOGTO_API_RESOURCE || 'https://api.saleschampionhub.com/kb'
@@ -46,10 +71,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         if (!cancelled) {
           setGlobalAccessToken(token)
           setTokenReady(true)
+          setForceLogout(false) // 重置强制登出标志
         }
       } catch (error) {
         console.error('Failed to fetch Logto access token:', error)
         if (!cancelled) {
+          // 获取 token 失败时，标记为就绪但不设置 token
+          // 这样可以让页面继续渲染，而 API 请求会失败并触发 401 处理
           setTokenReady(true)
         }
       }
@@ -74,18 +102,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   // Show loading spinner while Logto SDK initializes or token is being fetched
   if (isAuthInitializing || (isAuthenticated && !tokenReady)) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        gap: '16px'
-      }}>
-        <Spin size="large" />
-        <div style={{ color: '#666', fontSize: '14px' }}>
+      <div className="flex h-screen flex-col items-center justify-center gap-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">
           {isAuthInitializing ? '正在验证身份...' : '正在获取访问令牌...'}
-        </div>
+        </p>
       </div>
     )
   }

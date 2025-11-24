@@ -1,5 +1,4 @@
-import { Spin } from 'antd'
-import { LoadingOutlined } from '@ant-design/icons'
+import { Loader2 } from 'lucide-react'
 
 interface LoadingProps {
   tip?: string
@@ -19,7 +18,11 @@ export const Loading: React.FC<LoadingProps> = ({
   spinning = true,
   children,
 }) => {
-  const loadingIcon = <LoadingOutlined style={{ fontSize: size === 'large' ? 48 : size === 'default' ? 32 : 24 }} spin />
+  const sizeMap = {
+    small: 'h-6 w-6',
+    default: 'h-8 w-8',
+    large: 'h-12 w-12',
+  }
 
   if (!spinning && children) {
     return <>{children}</>
@@ -27,46 +30,33 @@ export const Loading: React.FC<LoadingProps> = ({
 
   if (fullscreen) {
     return (
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'rgba(255, 255, 255, 0.9)',
-          zIndex: 9999,
-        }}
-      >
-        <Spin indicator={loadingIcon} size={size} tip={tip} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className={`${sizeMap[size]} animate-spin text-primary`} />
+          {tip && <p className="text-sm text-muted-foreground">{tip}</p>}
+        </div>
       </div>
     )
   }
 
   if (children) {
     return (
-      <Spin indicator={loadingIcon} size={size} tip={tip} spinning={spinning}>
+      <div className="relative">
+        {spinning && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50">
+            <Loader2 className={`${sizeMap[size]} animate-spin text-primary`} />
+            {tip && <p className="ml-2 text-sm text-muted-foreground">{tip}</p>}
+          </div>
+        )}
         {children}
-      </Spin>
+      </div>
     )
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '48px 0',
-        gap: '16px'
-      }}
-    >
-      <Spin indicator={loadingIcon} size={size} />
-      {tip && <div style={{ color: '#666', fontSize: '14px' }}>{tip}</div>}
+    <div className="flex flex-col items-center justify-center gap-4 py-12">
+      <Loader2 className={`${sizeMap[size]} animate-spin text-primary`} />
+      {tip && <p className="text-sm text-muted-foreground">{tip}</p>}
     </div>
   )
 }
@@ -98,19 +88,9 @@ export const InlineLoading: React.FC<{ loading: boolean; tip?: string; children:
  */
 export const CardLoading: React.FC = () => {
   return (
-    <div
-      style={{
-        padding: 24,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: 200,
-        gap: '16px'
-      }}
-    >
-      <Spin size="large" />
-      <div style={{ color: '#666', fontSize: '14px' }}>加载中...</div>
+    <div className="flex min-h-[200px] flex-col items-center justify-center gap-4 p-6">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <p className="text-sm text-muted-foreground">加载中...</p>
     </div>
   )
 }

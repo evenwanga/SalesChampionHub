@@ -267,6 +267,22 @@ func (r *DocumentRepository) FindByContentHash(ctx context.Context, kbID, conten
 	return docs, nil
 }
 
+// ListChunks retrieves all chunks for a document
+func (r *DocumentRepository) ListChunks(ctx context.Context, docID string) ([]*models.DocumentChunk, error) {
+	var chunks []*models.DocumentChunk
+
+	err := r.db.WithContext(ctx).
+		Where("document_id = ?", docID).
+		Order("chunk_index ASC").
+		Find(&chunks).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chunks: %w", err)
+	}
+
+	return chunks, nil
+}
+
 // DocumentListOptions defines options for listing documents
 type DocumentListOptions struct {
 	Limit      int

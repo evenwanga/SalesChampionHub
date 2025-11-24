@@ -371,6 +371,36 @@ func (s *KBService) CheckUserKBAccess(ctx context.Context, kbID, tenantID, organ
 	return s.mountRepo.CheckUserAccess(ctx, kbID, tenantID, organizationID, userID, permission)
 }
 
+// ListMountsForKB lists all mounts for a knowledge base
+func (s *KBService) ListMountsForKB(ctx context.Context, kbID string) ([]*models.KnowledgeBaseMount, error) {
+	return s.mountRepo.ListMountsForKB(ctx, kbID)
+}
+
+// ListMountsForTenant lists all mounts for a tenant
+func (s *KBService) ListMountsForTenant(ctx context.Context, tenantID string) ([]*models.KnowledgeBaseMount, error) {
+	return s.mountRepo.ListMountsForTenant(ctx, tenantID)
+}
+
+// ListMountsForOrganization lists all mounts for an organization
+func (s *KBService) ListMountsForOrganization(ctx context.Context, organizationID string) ([]*models.KnowledgeBaseMount, error) {
+	return s.mountRepo.ListMountsForOrganization(ctx, organizationID)
+}
+
+// ListMountsForUser lists all mounts for a user
+func (s *KBService) ListMountsForUser(ctx context.Context, userID string) ([]*models.KnowledgeBaseMount, error) {
+	return s.mountRepo.ListMountsForUser(ctx, userID)
+}
+
+// GetMount gets a mount by ID
+func (s *KBService) GetMount(ctx context.Context, mountID int64) (*models.KnowledgeBaseMount, error) {
+	return s.mountRepo.GetMount(ctx, mountID)
+}
+
+// UpdateMountPermissions updates the permissions of a mount
+func (s *KBService) UpdateMountPermissions(ctx context.Context, mountID int64, permissions models.JSONMap) error {
+	return s.mountRepo.UpdateMountPermissions(ctx, mountID, permissions)
+}
+
 // Request/Response DTOs
 
 type CreateKBRequest struct {

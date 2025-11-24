@@ -42,6 +42,7 @@ var SupportedFileTypes = map[string]bool{
 // DocumentService provides business logic for document operations
 type DocumentService struct {
 	docRepo        *repository.DocumentRepository
+	chunkRepo      *repository.ChunkRepository
 	kbService      *KBService
 	processor      *DocumentProcessor
 	uploadDir      string
@@ -53,6 +54,7 @@ type DocumentService struct {
 // NewDocumentService creates a new document service
 func NewDocumentService(
 	docRepo *repository.DocumentRepository,
+	chunkRepo *repository.ChunkRepository,
 	kbService *KBService,
 	processor *DocumentProcessor,
 	uploadDir string,
@@ -62,6 +64,7 @@ func NewDocumentService(
 ) *DocumentService {
 	return &DocumentService{
 		docRepo:     docRepo,
+		chunkRepo:   chunkRepo,
 		kbService:   kbService,
 		processor:   processor,
 		uploadDir:   uploadDir,
@@ -233,6 +236,26 @@ func (s *DocumentService) calculateFileHash(file multipart.File) (string, error)
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// GetDocumentChunks retrieves all chunks for a document
+func (s *DocumentService) GetDocumentChunks(ctx context.Context, docID string) ([]*models.DocumentChunk, error) {
+	return s.docRepo.ListChunks(ctx, docID)
+}
+
+// ProcessDocument triggers document processing
+func (s *DocumentService) ProcessDocument(ctx context.Context, doc *models.Document) error {
+	return s.processor.ProcessDocument(ctx, doc.ID)
+}
+
+// ListDocumentChunks lists all chunks for a document with pagination
+func (s *DocumentService) ListDocumentChunks(ctx context.Context, documentID string, limit, offset int) ([]*models.DocumentChunk, int64, error) {
+	return s.chunkRepo.ListChunksByDocument(ctx, documentID, limit, offset)
+}
+
+// GetChunkStats returns chunk statistics for a document
+func (s *DocumentService) GetChunkStats(ctx context.Context, documentID string) (*repository.ChunkStats, error) {
+	return s.chunkRepo.GetChunkStats(ctx, documentID)
 }
 
 // Request DTOs

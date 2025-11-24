@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Typography } from 'antd'
-import { LoginOutlined } from '@ant-design/icons'
+import { LogIn } from 'lucide-react'
 import { useLogto } from '@logto/react'
 
-const { Title, Text } = Typography
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -23,53 +23,31 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div style={{
-      height: '100vh',
-      minHeight: '600px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
-      <Card
-        style={{
-          width: 480,
-          minWidth: 480,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-          borderRadius: '8px'
-        }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <Title level={2} style={{ marginBottom: 8 }}>
-            AI知识库管理平台
-          </Title>
-          <Text type="secondary">企业级智能知识管理系统</Text>
-        </div>
-
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Text style={{ fontSize: 14, color: '#666' }}>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#667eea] to-[#764ba2] p-4">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-3xl font-bold">AI知识库管理平台</CardTitle>
+          <CardDescription className="text-base">企业级智能知识管理系统</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="text-center text-sm text-muted-foreground">
             使用统一账号登录系统
-          </Text>
-        </div>
+          </div>
 
-        <Button
-          type="primary"
-          icon={<LoginOutlined />}
-          block
-          size="large"
-          loading={isLoading}
-          onClick={handleLogin}
-          style={{ height: 48 }}
-        >
-          登录
-        </Button>
+          <Button
+            onClick={handleLogin}
+            disabled={isLoading}
+            className="w-full h-12"
+            size="lg"
+          >
+            <LogIn className="mr-2 h-5 w-5" />
+            登录
+          </Button>
 
-        <div style={{ textAlign: 'center', marginTop: 24 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <div className="text-center text-xs text-muted-foreground">
             © 2025 SalesChampionHub. All rights reserved.
-          </Text>
-        </div>
+          </div>
+        </CardContent>
       </Card>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import documentService from '@/services/documentService'
-import type { DocumentListOptions, UpdateDocumentStatusRequest } from '@/types'
+import type { DocumentListOptions, UpdateDocumentStatusRequest, BatchUpdateStatusRequest } from '@/types'
 
 /**
  * Query keys for document data
@@ -105,5 +105,45 @@ export function useUpdateDocumentStatus() {
       queryClient.invalidateQueries({ queryKey: documentKeys.detail(variables.id) })
       queryClient.invalidateQueries({ queryKey: documentKeys.lists() })
     },
+  })
+}
+
+/**
+ * Hook to batch update document status
+ */
+export function useBatchUpdateStatus() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: BatchUpdateStatusRequest) => 
+      documentService.batchUpdateStatus(data),
+    onSuccess: () => {
+      // Invalidate all document lists
+      queryClient.invalidateQueries({ queryKey: documentKeys.lists() })
+    },
+  })
+}
+
+/**
+ * Hook to preview a document
+ */
+export function useDocumentPreview(id: string | null) {
+  return useQuery({
+    queryKey: ['document-preview', id],
+    queryFn: () => documentService.previewDocument(id!),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
+ * Hook to fetch document chunks
+ */
+export function useDocumentChunks(documentId: string | null, limit: number = 50) {
+  return useQuery({
+    queryKey: ['document-chunks', documentId, limit],
+    queryFn: () => documentService.listDocumentChunks(documentId!, limit, 0),
+    enabled: !!documentId,
+    staleTime: 5 * 60 * 1000,
   })
 }

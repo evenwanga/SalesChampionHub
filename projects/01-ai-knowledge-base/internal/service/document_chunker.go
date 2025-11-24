@@ -254,6 +254,9 @@ func isWordBoundary(char rune) bool {
 
 // normalizeWhitespace normalizes whitespace in text
 func normalizeWhitespace(text string) string {
+	// First, clean invalid UTF-8 characters
+	text = cleanInvalidUTF8(text)
+
 	// Replace multiple spaces with single space
 	text = strings.Join(strings.Fields(text), " ")
 
@@ -267,6 +270,39 @@ func normalizeWhitespace(text string) string {
 	}
 
 	return text
+}
+
+// cleanInvalidUTF8 removes invalid UTF-8 characters and null bytes that PostgreSQL cannot store
+func cleanInvalidUTF8(text string) string {
+	// Convert to runes to handle UTF-8 properly
+	runes := []rune(text)
+	cleaned := make([]rune, 0, len(runes))
+
+	for _, r := range runes {
+		// Skip null bytes (0x00) - PostgreSQL cannot store these
+		if r == 0 {
+			continue
+		}
+
+		// Skip other control characters except newline, tab, and carriage return
+		if r < 32 && r != '\n' && r != '\t' && r != '\r' {
+			continue
+		}
+
+		// Skip invalid Unicode characters
+		if r == utf8.RuneError {
+			continue
+		}
+
+		// Skip Unicode replacement character (often indicates encoding issues)
+		if r == '\uFFFD' {
+			continue
+		}
+
+		cleaned = append(cleaned, r)
+	}
+
+	return string(cleaned)
 }
 
 // ChunkWithMetadata splits text and includes metadata about each chunk

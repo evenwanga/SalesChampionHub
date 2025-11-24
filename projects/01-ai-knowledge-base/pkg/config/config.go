@@ -135,7 +135,7 @@ func Load() (*Config, error) {
 		},
 		Embedding: EmbeddingConfig{
 			Provider:  getEnv("EMBEDDING_PROVIDER", "bge"),
-			APIURL:    getEnv("EMBEDDING_API_URL", "http://bge-embedding:8000"),
+			APIURL:    getEnv("EMBEDDING_API_URL", "http://kb-bge-embedding:8000"),
 			APIKey:    getEnv("EMBEDDING_API_KEY", ""),
 			Model:     getEnv("EMBEDDING_MODEL", "bge-large-zh"),
 			Dimension: getEnvInt("EMBEDDING_DIMENSION", 1024),

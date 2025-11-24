@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/metrics"
 )
 
 var (
@@ -43,6 +45,11 @@ func NewEmbeddingService(apiURL, apiKey, model string, dimension int, timeout ti
 
 // EmbedText generates embedding vector for a single text
 func (s *EmbeddingService) EmbedText(ctx context.Context, text string) ([]float32, error) {
+	start := time.Now()
+	defer func() {
+		metrics.RecordEmbeddingLatency(time.Since(start).Seconds())
+	}()
+
 	if text == "" {
 		return nil, errors.New("text cannot be empty")
 	}
@@ -61,6 +68,11 @@ func (s *EmbeddingService) EmbedText(ctx context.Context, text string) ([]float3
 
 // EmbedBatch generates embedding vectors for multiple texts
 func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	start := time.Now()
+	defer func() {
+		metrics.RecordEmbeddingBatchLatency(time.Since(start).Seconds())
+	}()
+
 	if len(texts) == 0 {
 		return nil, errors.New("texts cannot be empty")
 	}
@@ -68,7 +80,7 @@ func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]
 	// Prepare request
 	reqBody := EmbeddingRequest{
 		Model: s.model,
-		Input: texts,
+		Texts: texts,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -82,8 +94,8 @@ func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
+	// Set headers with explicit UTF-8 encoding for Chinese characters
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if s.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	}
@@ -112,16 +124,19 @@ func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Extract embeddings
-	embeddings := make([][]float32, len(embResp.Data))
-	for i, data := range embResp.Data {
-		if len(data.Embedding) != s.dimension {
-			return nil, fmt.Errorf("%w: expected %d, got %d", ErrInvalidDimension, s.dimension, len(data.Embedding))
-		}
-		embeddings[i] = data.Embedding
+	// Validate embeddings
+	if len(embResp.Embeddings) == 0 {
+		return nil, fmt.Errorf("%w: no embeddings returned", ErrEmbeddingFailed)
 	}
 
-	return embeddings, nil
+	// Validate dimension
+	for i, embedding := range embResp.Embeddings {
+		if len(embedding) != s.dimension {
+			return nil, fmt.Errorf("%w: embedding %d expected %d, got %d", ErrInvalidDimension, i, s.dimension, len(embedding))
+		}
+	}
+
+	return embResp.Embeddings, nil
 }
 
 // HealthCheck checks if the embedding service is available
@@ -148,25 +163,14 @@ func (s *EmbeddingService) GetModel() string {
 
 type EmbeddingRequest struct {
 	Model string   `json:"model"`
-	Input []string `json:"input"`
+	Texts []string `json:"texts"`
 }
 
 type EmbeddingResponse struct {
-	Object string          `json:"object"`
-	Data   []EmbeddingData `json:"data"`
-	Model  string          `json:"model"`
-	Usage  EmbeddingUsage  `json:"usage"`
-}
-
-type EmbeddingData struct {
-	Object    string    `json:"object"`
-	Embedding []float32 `json:"embedding"`
-	Index     int       `json:"index"`
-}
-
-type EmbeddingUsage struct {
-	PromptTokens int `json:"prompt_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	Embeddings      [][]float32 `json:"embeddings"`
+	Model           string      `json:"model"`
+	Dimension       int         `json:"dimension"`
+	ProcessingTimeMs float64    `json:"processing_time_ms"`
 }
 
 // MockEmbeddingService for testing (generates random vectors)

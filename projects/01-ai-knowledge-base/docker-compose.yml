@@ -59,6 +59,12 @@ services:
       - LLM_API_URL=${LLM_API_URL}
       - LLM_MODEL=${LLM_MODEL:-qwen-plus}
       - LLM_TIMEOUT=30
+      
+      # Embedding配置
+      - EMBEDDING_TIMEOUT=120
+    volumes:
+      # Persist uploaded documents to host directory
+      - ../../docker_data/kb-uploads:/root/uploads
     networks:
       - saleschampion_network
     depends_on:

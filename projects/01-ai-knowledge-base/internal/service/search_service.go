@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/metrics"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 	"github.com/redis/go-redis/v9"
@@ -47,6 +48,9 @@ func NewSearchService(
 // Returns top K most similar chunks from specified knowledge bases
 func (s *SearchService) SearchKnowledgeBases(ctx context.Context, req *SearchRequest) (*SearchResponse, error) {
 	startTime := time.Now()
+	defer func() {
+		metrics.RecordVectorSearchLatency(time.Since(startTime).Seconds())
+	}()
 
 	// Validate input
 	if err := req.Validate(); err != nil {
@@ -63,10 +67,12 @@ func (s *SearchService) SearchKnowledgeBases(ctx context.Context, req *SearchReq
 		cacheKey := s.generateSearchCacheKey(req.KBIDs, req.QueryVector, req.TopK, "semantic")
 		cached, err := s.getSearchResultFromCache(ctx, cacheKey)
 		if err == nil && cached != nil {
+			metrics.RecordCacheHit()
 			// Update latency to include cache lookup time
 			cached.LatencyMS = int(time.Since(startTime).Milliseconds())
 			return cached, nil
 		}
+		metrics.RecordCacheMiss()
 	}
 
 	// Perform vector similarity search

@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	ErrChunkNotFound = errors.New("chunk not found")
+	ErrChunkNotFound  = errors.New("chunk not found")
 	ErrInvalidChunkID = errors.New("invalid chunk ID")
 )
 
@@ -171,4 +171,56 @@ func (r *ChunkRepository) SearchChunks(ctx context.Context, kbID, query string, 
 	}
 
 	return chunks, nil
+}
+
+// ListChunksByDocument lists all chunks for a document with pagination
+func (r *ChunkRepository) ListChunksByDocument(ctx context.Context, documentID string, limit, offset int) ([]*models.DocumentChunk, int64, error) {
+	var chunks []*models.DocumentChunk
+	var total int64
+
+	// Get total count
+	if err := r.db.WithContext(ctx).
+		Model(&models.DocumentChunk{}).
+		Where("document_id = ?", documentID).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Get chunks with pagination
+	if err := r.db.WithContext(ctx).
+		Where("document_id = ?", documentID).
+		Order("chunk_index ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&chunks).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return chunks, total, nil
+}
+
+// GetChunkStats returns statistics for a document's chunks
+func (r *ChunkRepository) GetChunkStats(ctx context.Context, documentID string) (*ChunkStats, error) {
+	var stats ChunkStats
+
+	err := r.db.WithContext(ctx).
+		Model(&models.DocumentChunk{}).
+		Select(`
+			COUNT(*) as total_chunks,
+			AVG(content_length) as avg_chunk_size,
+			MIN(content_length) as min_chunk_size,
+			MAX(content_length) as max_chunk_size
+		`).
+		Where("document_id = ?", documentID).
+		Scan(&stats).Error
+
+	return &stats, err
+}
+
+// ChunkStats represents chunk statistics
+type ChunkStats struct {
+	TotalChunks  int64   `json:"total_chunks"`
+	AvgChunkSize float64 `json:"avg_chunk_size"`
+	MinChunkSize int64   `json:"min_chunk_size"`
+	MaxChunkSize int64   `json:"max_chunk_size"`
 }

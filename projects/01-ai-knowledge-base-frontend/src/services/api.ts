@@ -36,10 +36,23 @@ api.interceptors.response.use(
     return response
   },
   (error: AxiosError<APIResponse>) => {
-    // Handle 401 Unauthorized - redirect to login
+    // Handle 401 Unauthorized
     if (error.response?.status === 401) {
+      // 清除 token
       ;(window as any).__logtoAccessToken = undefined
-      window.location.href = '/login'
+      
+      // 不要直接使用 window.location.href 重定向，这会导致循环
+      // 让应用层（React Router）处理重定向
+      console.warn('API returned 401 - Access token is invalid or expired')
+      
+      // 可选：触发一个自定义事件，让应用监听并处理
+      const event = new CustomEvent('auth:unauthorized', { 
+        detail: { 
+          message: 'Session expired or invalid token',
+          timestamp: Date.now()
+        }
+      })
+      window.dispatchEvent(event)
     }
 
     // Extract error message

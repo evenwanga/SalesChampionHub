@@ -13,6 +13,7 @@ import (
 	_ "github.com/SalesChampionHub/ai-knowledge-base/docs/swagger" // Import swagger docs
 	kbcache "github.com/SalesChampionHub/ai-knowledge-base/internal/cache"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/handler"
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/metrics"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/middleware"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/service"
@@ -22,6 +23,7 @@ import (
 	"github.com/SalesChampionHub/ai-knowledge-base/pkg/database"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -97,6 +99,11 @@ func main() {
 		cfg.UserCenter.Timeout,
 	)
 
+	// Initialize system metrics collector
+	metricsCollector := metrics.NewSystemMetricsCollector()
+	metricsCollector.Start(5 * time.Second) // Collect every 5 seconds
+	defer metricsCollector.Stop()
+
 	// Set Gin mode
 	gin.SetMode(cfg.Server.Mode)
 
@@ -109,6 +116,7 @@ func main() {
 	router.Use(middleware.CORS())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.ErrorRecovery())
+	router.Use(middleware.MetricsMiddleware()) // Add metrics collection
 
 	// Initialize Logto authentication middleware
 	log.Printf("🔐 Initializing Logto authentication...")
@@ -142,12 +150,13 @@ func main() {
 	chunkRepo := repository.NewChunkRepository(db)
 	vectorRepo := repository.NewVectorRepository(db)
 	queryLogRepo := repository.NewQueryLogRepository(db)
+	auditRepo := repository.NewAuditRepository(db)
 
 	// Initialize cache
 	kbCache := kbcache.NewKBCache(redisClient)
 
 	// Initialize document processing components
-	docParser := service.NewDocumentParser(100000) // 100K chars max per document
+	docParser := service.NewDocumentParser(100000)      // 100K chars max per document
 	docChunker := service.NewDocumentChunker(1000, 200) // 1000 chars per chunk, 200 chars overlap
 
 	// Initialize embedding service based on provider
@@ -195,16 +204,27 @@ func main() {
 	// Initialize services
 	kbService := service.NewKBService(kbRepo, mountRepo, docRepo, kbCache, cfg.Query.MaxKBQueryLimit)
 	searchService := service.NewSearchService(vectorRepo, queryLogRepo, redisClient, cfg.Query.MaxKBQueryLimit, cfg.Features.CacheTTL)
-	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, llmClient, 8000) // 8000 chars max context
-	docService := service.NewDocumentService(docRepo, kbService, docProcessor, "./uploads", 100*1024*1024, 1000, 200) // 100MB max, 1000 char chunks, 200 char overlap
+	ragService := service.NewRAGService(searchService, vectorRepo, queryLogRepo, llmClient, 8000)                                // 8000 chars max context
+	docService := service.NewDocumentService(docRepo, chunkRepo, kbService, docProcessor, "./uploads", 100*1024*1024, 1000, 200) // 100MB max, 1000 char chunks, 200 char overlap
+	auditService := service.NewAuditService(auditRepo)
 
 	// Initialize handlers
 	kbHandler := handler.NewKBHandler(kbService)
 	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService, queryLogRepo)
 	docHandler := handler.NewDocumentHandler(docService)
+	embeddingHandler := handler.NewEmbeddingHandler(embeddingClient)
+	monitoringHandler := handler.NewMonitoringHandler(db, redisClient)
+	auditHandler := handler.NewAuditHandler(auditService)
+
+	// Initialize audit middleware
+	auditMiddleware := middleware.NewAuditMiddleware(auditRepo)
+	log.Println("✅ Audit logging system initialized")
 
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Prometheus metrics endpoint (no auth required)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", func(c *gin.Context) {
@@ -229,10 +249,24 @@ func main() {
 			})
 		})
 
+		// Health check endpoint (no auth required) - same as root /health
+		v1.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "healthy",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"services": gin.H{
+					"database": "up",
+					"redis":    "up",
+				},
+				"version": "1.0.0",
+			})
+		})
+
 		// Authenticated endpoints (using Logto)
 		authenticated := v1.Group("")
 		authenticated.Use(logtoAuth.Authenticate()) // Use Logto JWT verification
 		authenticated.Use(rlsMiddleware.SetRLSContext())
+		authenticated.Use(auditMiddleware.AuditLogger()) // Add audit logging
 		{
 			// User info
 			authenticated.GET("/me", func(c *gin.Context) {
@@ -249,19 +283,24 @@ func main() {
 				kbs.PUT("/:id", kbHandler.UpdateKB)
 				kbs.DELETE("/:id", kbHandler.DeleteKB)
 				kbs.GET("/:id/stats", kbHandler.GetKBStats)
+				kbs.GET("/:id/mounts", kbHandler.ListKBMounts)
 			}
 
 			// Mounts
 			mounts := authenticated.Group("/mounts")
 			{
+				mounts.GET("", kbHandler.ListMounts)
+				mounts.GET("/:id", kbHandler.GetMount)
 				mounts.POST("/tenant", kbHandler.MountKBToTenant)
 				mounts.POST("/organization", kbHandler.MountKBToOrganization)
 				mounts.POST("/user", kbHandler.MountKBToUser)
 				mounts.DELETE("/:id", kbHandler.Unmount)
+				mounts.PUT("/:id/permissions", kbHandler.UpdateMountPermissions)
 			}
 
 			// User accessible KBs
 			authenticated.GET("/user/accessible-kbs", kbHandler.GetAccessibleKBs)
+			authenticated.GET("/user/mounts", kbHandler.GetUserMounts)
 
 			// Documents
 			docs := authenticated.Group("/documents")
@@ -272,6 +311,10 @@ func main() {
 				docs.DELETE("/:id", docHandler.DeleteDocument)
 				docs.PUT("/:id/status", docHandler.UpdateDocumentStatus)
 				docs.POST("/batch-delete", docHandler.BatchDeleteDocuments)
+				docs.POST("/batch-update-status", docHandler.BatchUpdateStatus)
+				docs.GET("/:id/chunks", docHandler.ListDocumentChunks)
+				docs.GET("/:id/download", docHandler.DownloadDocument)
+				docs.GET("/:id/preview", docHandler.PreviewDocument)
 			}
 
 			// Search endpoints
@@ -292,6 +335,20 @@ func main() {
 			// Query history and statistics
 			authenticated.GET("/query-history", searchHandler.GetQueryHistory)
 			authenticated.GET("/query-stats", searchHandler.GetQueryStats)
+
+			// Embedding endpoints
+			authenticated.POST("/embedding", embeddingHandler.GenerateEmbedding)
+			authenticated.POST("/embeddings/batch", embeddingHandler.GenerateBatchEmbeddings)
+
+			// Monitoring endpoints
+			system := authenticated.Group("/system")
+			{
+				system.GET("/status", monitoringHandler.GetSystemStatus)
+				system.GET("/metrics", monitoringHandler.GetMetricsSnapshot)
+			}
+
+			// Audit logs endpoints (admin only - should add role check in production)
+			auditHandler.RegisterRoutes(authenticated)
 		}
 	}
 

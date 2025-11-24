@@ -93,9 +93,11 @@ func (r *KBRepository) Update(ctx context.Context, kb *models.KnowledgeBase) err
 	kb.UpdatedAt = time.Now().UTC()
 
 	// Update the KB (RLS will prevent unauthorized updates)
+	// Use Select to ensure zero values (like is_active=false) are updated
 	result := r.db.WithContext(ctx).
 		Model(&models.KnowledgeBase{}).
 		Where("id = ?", kb.ID).
+		Select("*").
 		Updates(kb)
 
 	if result.Error != nil {

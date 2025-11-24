@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/middleware"
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/repository"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/service"
 	"github.com/gin-gonic/gin"
@@ -428,4 +429,229 @@ func (h *KBHandler) Unmount(c *gin.Context) {
 	middleware.RespondWithSuccess(c, gin.H{
 		"message": "Mount removed successfully",
 	})
+}
+
+// ListKBMounts godoc
+// @Summary 获取知识库的挂载列表
+// @Description 获取指定知识库的所有挂载记录，包括租户、组织和用户级别的挂载
+// @Tags 知识库挂载
+// @Produce json
+// @Param id path string true "知识库ID"
+// @Success 200 {object} middleware.SuccessResponse{data=object{mounts=[]models.KnowledgeBaseMount,total=int}} "挂载列表"
+// @Failure 400 {object} middleware.ErrorResponse "知识库ID必填"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /knowledge-bases/{id}/mounts [get]
+func (h *KBHandler) ListKBMounts(c *gin.Context) {
+	kbID := c.Param("id")
+	if kbID == "" {
+		middleware.RespondBadRequest(c, "KB ID is required")
+		return
+	}
+
+	mounts, err := h.kbService.ListMountsForKB(c.Request.Context(), kbID)
+	if err != nil {
+		middleware.RespondInternalError(c, "Failed to list mounts: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{
+		"mounts": mounts,
+		"total":  len(mounts),
+	})
+}
+
+// ListMounts godoc
+// @Summary 获取挂载列表
+// @Description 获取挂载列表，支持按类型、租户ID、组织ID、用户ID过滤
+// @Tags 知识库挂载
+// @Produce json
+// @Param mount_type query string false "挂载类型（tenant/organization/user）"
+// @Param tenant_id query string false "租户ID"
+// @Param organization_id query string false "组织ID"
+// @Param user_id query string false "用户ID"
+// @Success 200 {object} middleware.SuccessResponse{data=object{mounts=[]models.KnowledgeBaseMount,total=int}} "挂载列表"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /mounts [get]
+func (h *KBHandler) ListMounts(c *gin.Context) {
+	mountType := c.Query("mount_type")
+	tenantID := c.Query("tenant_id")
+	organizationID := c.Query("organization_id")
+	userID := c.Query("user_id")
+
+	// Get current user context
+	user := middleware.MustGetUserContext(c)
+
+	var mounts []*models.KnowledgeBaseMount
+	var err error
+
+	// 根据查询参数选择合适的查询方法
+	switch {
+	case mountType == "tenant" && tenantID != "":
+		mounts, err = h.kbService.ListMountsForTenant(c.Request.Context(), tenantID)
+	case mountType == "organization" && organizationID != "":
+		mounts, err = h.kbService.ListMountsForOrganization(c.Request.Context(), organizationID)
+	case mountType == "user" && userID != "":
+		mounts, err = h.kbService.ListMountsForUser(c.Request.Context(), userID)
+	case tenantID != "":
+		mounts, err = h.kbService.ListMountsForTenant(c.Request.Context(), tenantID)
+	case organizationID != "":
+		mounts, err = h.kbService.ListMountsForOrganization(c.Request.Context(), organizationID)
+	case userID != "":
+		mounts, err = h.kbService.ListMountsForUser(c.Request.Context(), userID)
+	default:
+		// 默认返回当前用户的挂载
+		mounts, err = h.kbService.ListMountsForUser(c.Request.Context(), user.ID)
+	}
+
+	if err != nil {
+		middleware.RespondInternalError(c, "Failed to list mounts: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{
+		"mounts": mounts,
+		"total":  len(mounts),
+	})
+}
+
+// UpdateMountPermissions godoc
+// @Summary 更新挂载权限
+// @Description 更新指定挂载的权限设置
+// @Tags 知识库挂载
+// @Accept json
+// @Produce json
+// @Param id path int true "挂载ID"
+// @Param request body UpdateMountPermissionsRequest true "权限更新请求"
+// @Success 200 {object} middleware.SuccessResponse{data=object{message=string}} "权限更新成功"
+// @Failure 400 {object} middleware.ErrorResponse "请求参数错误"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 404 {object} middleware.ErrorResponse "挂载不存在"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /mounts/{id}/permissions [put]
+func (h *KBHandler) UpdateMountPermissions(c *gin.Context) {
+	mountIDStr := c.Param("id")
+	if mountIDStr == "" {
+		middleware.RespondBadRequest(c, "Mount ID is required")
+		return
+	}
+
+	mountID, err := strconv.ParseInt(mountIDStr, 10, 64)
+	if err != nil {
+		middleware.RespondBadRequest(c, "Invalid mount ID")
+		return
+	}
+
+	var req UpdateMountPermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondBadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.kbService.UpdateMountPermissions(c.Request.Context(), mountID, req.Permissions); err != nil {
+		if err == repository.ErrMountNotFound {
+			middleware.RespondNotFound(c, "Mount not found")
+			return
+		}
+		middleware.RespondInternalError(c, "Failed to update permissions: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{
+		"message": "Permissions updated successfully",
+	})
+}
+
+// GetMount godoc
+// @Summary 获取挂载详情
+// @Description 获取单个挂载记录的详细信息
+// @Tags 知识库挂载
+// @Produce json
+// @Param id path int true "挂载ID"
+// @Success 200 {object} middleware.SuccessResponse{data=models.KnowledgeBaseMount} "挂载详情"
+// @Failure 400 {object} middleware.ErrorResponse "挂载ID无效"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 404 {object} middleware.ErrorResponse "挂载不存在"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /mounts/{id} [get]
+func (h *KBHandler) GetMount(c *gin.Context) {
+	mountIDStr := c.Param("id")
+	if mountIDStr == "" {
+		middleware.RespondBadRequest(c, "Mount ID is required")
+		return
+	}
+
+	mountID, err := strconv.ParseInt(mountIDStr, 10, 64)
+	if err != nil {
+		middleware.RespondBadRequest(c, "Invalid mount ID")
+		return
+	}
+
+	mount, err := h.kbService.GetMount(c.Request.Context(), mountID)
+	if err != nil {
+		if err == repository.ErrMountNotFound {
+			middleware.RespondNotFound(c, "Mount not found")
+			return
+		}
+		middleware.RespondInternalError(c, "Failed to get mount: "+err.Error())
+		return
+	}
+
+	middleware.RespondWithSuccess(c, mount)
+}
+
+// GetUserMounts godoc
+// @Summary 获取当前用户的所有挂载
+// @Description 获取当前用户通过租户、组织和个人级别可访问的所有知识库挂载
+// @Tags 用户相关
+// @Produce json
+// @Success 200 {object} middleware.SuccessResponse{data=object{mounts=[]models.KnowledgeBaseMount,total=int,breakdown=object}} "用户挂载列表"
+// @Failure 401 {object} middleware.ErrorResponse "未授权"
+// @Failure 500 {object} middleware.ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /user/mounts [get]
+func (h *KBHandler) GetUserMounts(c *gin.Context) {
+	user := middleware.MustGetUserContext(c)
+
+	// 获取三级挂载
+	tenantMounts, _ := h.kbService.ListMountsForTenant(c.Request.Context(), user.TenantID)
+	orgMounts, _ := h.kbService.ListMountsForOrganization(c.Request.Context(), user.OrganizationID)
+	userMounts, _ := h.kbService.ListMountsForUser(c.Request.Context(), user.ID)
+
+	// 合并所有挂载（去重）
+	mountMap := make(map[string]*models.KnowledgeBaseMount)
+	for _, m := range tenantMounts {
+		mountMap[m.KBID] = m
+	}
+	for _, m := range orgMounts {
+		mountMap[m.KBID] = m
+	}
+	for _, m := range userMounts {
+		mountMap[m.KBID] = m
+	}
+
+	allMounts := make([]*models.KnowledgeBaseMount, 0, len(mountMap))
+	for _, m := range mountMap {
+		allMounts = append(allMounts, m)
+	}
+
+	middleware.RespondWithSuccess(c, gin.H{
+		"mounts": allMounts,
+		"total":  len(allMounts),
+		"breakdown": gin.H{
+			"tenant_mounts":       len(tenantMounts),
+			"organization_mounts": len(orgMounts),
+			"user_mounts":         len(userMounts),
+		},
+	})
+}
+
+// UpdateMountPermissionsRequest represents a permissions update request
+type UpdateMountPermissionsRequest struct {
+	Permissions models.JSONMap `json:"permissions" binding:"required"`
 }

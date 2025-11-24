@@ -1,7 +1,1 @@
-/* PC端管理后台布局 - 全屏布局，无宽度限制 */
-#root {
-  width: 100%;
-  height: 100vh;
-  margin: 0;
-  padding: 0;
-}
+/* App 全局样式 */

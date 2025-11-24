@@ -24,7 +24,233 @@ definitions:
       success_count:
         type: integer
     type: object
+  handler.BatchEmbeddingRequest:
+    properties:
+      texts:
+        items:
+          type: string
+        maxItems: 100
+        minItems: 1
+        type: array
+    required:
+    - texts
+    type: object
+  handler.BatchEmbeddingResponse:
+    properties:
+      count:
+        example: 2
+        type: integer
+      dimension:
+        example: 1024
+        type: integer
+      embeddings:
+        items:
+          items:
+            format: float32
+            type: number
+          type: array
+        type: array
+      model:
+        example: BAAI/bge-large-zh-v1.5
+        type: string
+    type: object
+  handler.BatchUpdateStatusRequest:
+    properties:
+      document_ids:
+        items:
+          type: string
+        maxItems: 100
+        minItems: 1
+        type: array
+      set_processed_at:
+        type: boolean
+      status:
+        enum:
+        - pending
+        - processing
+        - completed
+        - failed
+        type: string
+      trigger_reprocess:
+        description: Only for pending status
+        type: boolean
+    required:
+    - document_ids
+    - status
+    type: object
+  handler.BatchUpdateStatusResponse:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      failed_count:
+        type: integer
+      failed_ids:
+        items:
+          type: string
+        type: array
+      success_count:
+        type: integer
+    type: object
+  handler.CPUMetrics:
+    properties:
+      cores:
+        type: integer
+      usage_percent:
+        type: number
+    type: object
+  handler.DiskMetrics:
+    properties:
+      free:
+        type: integer
+      path:
+        type: string
+      total:
+        type: integer
+      used:
+        type: integer
+      used_percent:
+        type: number
+    type: object
+  handler.DocumentChunksResponse:
+    properties:
+      chunks:
+        items:
+          $ref: '#/definitions/models.DocumentChunk'
+        type: array
+      document_id:
+        type: string
+      document_name:
+        type: string
+      limit:
+        type: integer
+      offset:
+        type: integer
+      stats:
+        $ref: '#/definitions/repository.ChunkStats'
+      total:
+        type: integer
+    type: object
+  handler.DocumentPreviewResponse:
+    properties:
+      chunk_count:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      document_id:
+        type: string
+      file_size:
+        type: integer
+      file_type:
+        type: string
+      filename:
+        type: string
+      processed_at:
+        type: string
+      status:
+        type: string
+    type: object
+  handler.EmbeddingRequest:
+    properties:
+      text:
+        example: 如何使用AI知识库进行语义搜索？
+        type: string
+    required:
+    - text
+    type: object
+  handler.EmbeddingResponse:
+    properties:
+      dimension:
+        example: 1024
+        type: integer
+      embedding:
+        items:
+          type: number
+        type: array
+      model:
+        example: BAAI/bge-large-zh-v1.5
+        type: string
+    type: object
+  handler.MemoryMetrics:
+    properties:
+      free:
+        type: integer
+      total:
+        type: integer
+      used:
+        type: integer
+      used_percent:
+        type: number
+    type: object
+  handler.NetworkMetrics:
+    properties:
+      bytes_recv:
+        type: integer
+      bytes_sent:
+        type: integer
+    type: object
+  handler.RuntimeMetrics:
+    properties:
+      go_version:
+        type: string
+      goroutines:
+        type: integer
+      last_gc_time:
+        type: string
+      mem_alloc_mb:
+        type: integer
+      mem_total_mb:
+        type: integer
+      num_cpu:
+        type: integer
+      num_gc:
+        type: integer
+    type: object
   handler.SearchRequestBody:
+    type: object
+  handler.ServiceInfo:
+    properties:
+      available:
+        type: boolean
+      latency:
+        type: string
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  handler.SystemMetrics:
+    properties:
+      cpu:
+        $ref: '#/definitions/handler.CPUMetrics'
+      disk:
+        $ref: '#/definitions/handler.DiskMetrics'
+      memory:
+        $ref: '#/definitions/handler.MemoryMetrics'
+      network:
+        $ref: '#/definitions/handler.NetworkMetrics'
+    type: object
+  handler.SystemStatusResponse:
+    properties:
+      runtime:
+        $ref: '#/definitions/handler.RuntimeMetrics'
+      services:
+        additionalProperties:
+          $ref: '#/definitions/handler.ServiceInfo'
+        type: object
+      status:
+        type: string
+      system:
+        $ref: '#/definitions/handler.SystemMetrics'
+      timestamp:
+        type: string
+      uptime:
+        type: string
+      version:
+        type: string
     type: object
   handler.UpdateDocumentStatusRequest:
     properties:
@@ -39,6 +265,13 @@ definitions:
         type: string
     required:
     - status
+    type: object
+  handler.UpdateMountPermissionsRequest:
+    properties:
+      permissions:
+        $ref: '#/definitions/models.JSONMap'
+    required:
+    - permissions
     type: object
   middleware.ErrorDetail:
     properties:
@@ -94,6 +327,63 @@ definitions:
       success:
         type: boolean
     type: object
+  models.AuditDetails:
+    additionalProperties: true
+    type: object
+  models.AuditLog:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      details:
+        $ref: '#/definitions/models.AuditDetails'
+      duration_ms:
+        type: integer
+      error_message:
+        type: string
+      id:
+        type: integer
+      ip_address:
+        type: string
+      request_method:
+        type: string
+      request_path:
+        type: string
+      resource_id:
+        type: string
+      resource_type:
+        type: string
+      status:
+        type: string
+      tenant_id:
+        type: string
+      user_agent:
+        type: string
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  models.AuditLogStats:
+    properties:
+      success_rate:
+        type: number
+      top_actions:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      top_users:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      total_operations:
+        type: integer
+      unique_users:
+        type: integer
+    type: object
   models.Document:
     properties:
       chunk_count:
@@ -134,6 +424,29 @@ definitions:
       uploaded_by:
         type: string
     type: object
+  models.DocumentChunk:
+    properties:
+      chunk_index:
+        type: integer
+      content:
+        type: string
+      content_length:
+        type: integer
+      created_at:
+        type: string
+      document:
+        allOf:
+        - $ref: '#/definitions/models.Document'
+        description: Relations
+      document_id:
+        type: string
+      id:
+        type: string
+      kb_id:
+        type: string
+      metadata:
+        $ref: '#/definitions/models.JSONMap'
+    type: object
   models.JSONMap:
     additionalProperties: true
     type: object
@@ -149,6 +462,8 @@ definitions:
         type: integer
       id:
         type: string
+      is_active:
+        type: boolean
       last_updated_at:
         type: string
       name:
@@ -218,6 +533,8 @@ definitions:
         $ref: '#/definitions/models.JSONMap'
       query_text:
         type: string
+      query_type:
+        type: string
       result_count:
         type: integer
       tenant_id:
@@ -227,21 +544,51 @@ definitions:
       user_id:
         type: string
     type: object
-  repository.QueryStats:
+  models.UserAuditStats:
     properties:
-      avg_latency_ms:
+      error_count:
+        type: integer
+      failure_count:
+        type: integer
+      success_count:
+        type: integer
+      top_actions:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+      total_operations:
+        type: integer
+    type: object
+  repository.ChunkStats:
+    properties:
+      avg_chunk_size:
         type: number
-      top_kbs:
-        additionalProperties:
-          format: int64
-          type: integer
-        description: KB ID -> query count
-        type: object
+      max_chunk_size:
+        type: integer
+      min_chunk_size:
+        type: integer
+      total_chunks:
+        type: integer
+      total_tokens:
+        type: integer
+    type: object
+  repository.QueryStatsGrouped:
+    properties:
+      ask_count:
+        description: Ask-type queries
+        type: integer
+      avg_processing_time_ms:
+        description: Average processing time
+        type: number
+      period:
+        description: Date period (YYYY-MM-DD)
+        type: string
+      search_count:
+        description: Search-type queries
+        type: integer
       total_queries:
-        type: integer
-      total_results:
-        type: integer
-      unique_users:
+        description: Total queries in period
         type: integer
     type: object
   repository.SearchResult:
@@ -298,7 +645,13 @@ definitions:
         type: string
       name:
         type: string
+      organization_id:
+        description: From context, set by handler
+        type: string
       owner_id:
+        type: string
+      owner_type:
+        description: tenant, organization, user
         type: string
       settings:
         $ref: '#/definitions/models.JSONMap'
@@ -306,12 +659,16 @@ definitions:
         items:
           type: string
         type: array
+      tenant_id:
+        description: From context, set by handler
+        type: string
       visibility:
         description: public, private, shared
         type: string
     required:
     - name
     - owner_id
+    - owner_type
     type: object
   service.MountKBRequest:
     properties:
@@ -366,6 +723,8 @@ definitions:
     properties:
       description:
         type: string
+      is_active:
+        type: boolean
       name:
         type: string
       settings:
@@ -392,6 +751,255 @@ info:
   title: AI知识库管理平台 API
   version: "1.0"
 paths:
+  /api/v1/audit-logs:
+    get:
+      consumes:
+      - application/json
+      description: 查询审计日志，支持多种过滤条件
+      parameters:
+      - description: 租户ID
+        in: query
+        name: tenant_id
+        type: string
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 资源类型
+        in: query
+        name: resource_type
+        type: string
+      - description: 资源ID
+        in: query
+        name: resource_id
+        type: string
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询审计日志
+      tags:
+      - 审计日志
+  /api/v1/audit-logs/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据ID获取审计日志详情
+      parameters:
+      - description: 审计日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditLog'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取审计日志详情
+      tags:
+      - 审计日志
+  /api/v1/audit-logs/export:
+    get:
+      consumes:
+      - application/json
+      description: 导出审计日志为CSV或JSON格式
+      parameters:
+      - description: 导出格式（csv/json）
+        in: query
+        name: format
+        required: true
+        type: string
+      - description: 租户ID
+        in: query
+        name: tenant_id
+        type: string
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: string
+      - description: 操作类型
+        in: query
+        name: action
+        type: string
+      - description: 资源类型
+        in: query
+        name: resource_type
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 导出审计日志
+      tags:
+      - 审计日志
+  /api/v1/audit-logs/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定租户的审计统计信息
+      parameters:
+      - description: 统计天数（默认30天）
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditLogStats'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取租户审计统计
+      tags:
+      - 审计日志
+  /api/v1/audit-logs/users/{user_id}/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定用户的审计统计信息
+      parameters:
+      - description: 用户ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: 统计天数（默认30天）
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.UserAuditStats'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取用户审计统计
+      tags:
+      - 审计日志
+  /api/v1/system/metrics:
+    get:
+      description: 获取当前时刻的关键性能指标快照
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 指标快照
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 获取指标快照
+      tags:
+      - 监控
+  /api/v1/system/status:
+    get:
+      description: 获取详细的系统状态信息，包括CPU、内存、磁盘、网络等指标
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 系统状态信息
+          schema:
+            $ref: '#/definitions/handler.SystemStatusResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取系统状态
+      tags:
+      - 监控
   /ask:
     post:
       consumes:
@@ -650,6 +1258,117 @@ paths:
       summary: Get a document
       tags:
       - documents
+  /documents/{id}/chunks:
+    get:
+      description: Get all chunks for a document with pagination
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 50
+        description: Number of results per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.DocumentChunksResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List document chunks
+      tags:
+      - documents
+  /documents/{id}/download:
+    get:
+      description: Download the original uploaded document file
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Document file
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download document
+      tags:
+      - documents
+  /documents/{id}/preview:
+    get:
+      description: Get the extracted text content of a document
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.DocumentPreviewResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Preview document content
+      tags:
+      - documents
   /documents/{id}/status:
     put:
       consumes:
@@ -733,6 +1452,125 @@ paths:
       summary: Batch delete documents
       tags:
       - documents
+  /documents/batch-update-status:
+    post:
+      consumes:
+      - application/json
+      description: Update status for multiple documents at once
+      parameters:
+      - description: Batch status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.BatchUpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.BatchUpdateStatusResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Batch update document status
+      tags:
+      - documents
+  /embedding:
+    post:
+      consumes:
+      - application/json
+      description: 将文本转换为1024维向量，用于语义搜索和RAG问答。使用BGE-large-zh模型
+      parameters:
+      - description: 文本向量化请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.EmbeddingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 向量生成成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.EmbeddingResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 生成文本向量
+      tags:
+      - 向量化
+  /embeddings/batch:
+    post:
+      consumes:
+      - application/json
+      description: 批量将多个文本转换为向量，提高处理效率
+      parameters:
+      - description: 批量文本向量化请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.BatchEmbeddingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 批量向量生成成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.BatchEmbeddingResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 批量生成文本向量
+      tags:
+      - 向量化
   /knowledge-bases:
     get:
       description: 分页获取知识库列表，支持多种过滤条件
@@ -986,6 +1824,51 @@ paths:
       summary: 更新知识库
       tags:
       - 知识库管理
+  /knowledge-bases/{id}/mounts:
+    get:
+      description: 获取指定知识库的所有挂载记录，包括租户、组织和用户级别的挂载
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 挂载列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    mounts:
+                      items:
+                        $ref: '#/definitions/models.KnowledgeBaseMount'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: 知识库ID必填
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取知识库的挂载列表
+      tags:
+      - 知识库挂载
   /knowledge-bases/{id}/stats:
     get:
       description: 获取知识库的详细统计信息，包括文档数量、总大小、状态分布等
@@ -1031,6 +1914,58 @@ paths:
       summary: 获取知识库统计
       tags:
       - 知识库管理
+  /mounts:
+    get:
+      description: 获取挂载列表，支持按类型、租户ID、组织ID、用户ID过滤
+      parameters:
+      - description: 挂载类型（tenant/organization/user）
+        in: query
+        name: mount_type
+        type: string
+      - description: 租户ID
+        in: query
+        name: tenant_id
+        type: string
+      - description: 组织ID
+        in: query
+        name: organization_id
+        type: string
+      - description: 用户ID
+        in: query
+        name: user_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 挂载列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    mounts:
+                      items:
+                        $ref: '#/definitions/models.KnowledgeBaseMount'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取挂载列表
+      tags:
+      - 知识库挂载
   /mounts/{id}:
     delete:
       description: 移除知识库挂载，撤销指定级别的访问权限
@@ -1074,6 +2009,100 @@ paths:
       security:
       - BearerAuth: []
       summary: 取消知识库挂载
+      tags:
+      - 知识库挂载
+    get:
+      description: 获取单个挂载记录的详细信息
+      parameters:
+      - description: 挂载ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 挂载详情
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.KnowledgeBaseMount'
+              type: object
+        "400":
+          description: 挂载ID无效
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 挂载不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取挂载详情
+      tags:
+      - 知识库挂载
+  /mounts/{id}/permissions:
+    put:
+      consumes:
+      - application/json
+      description: 更新指定挂载的权限设置
+      parameters:
+      - description: 挂载ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 权限更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateMountPermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 权限更新成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    message:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: 挂载不存在
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新挂载权限
       tags:
       - 知识库挂载
   /mounts/organization:
@@ -1264,29 +2293,36 @@ paths:
       - 查询历史
   /query-stats:
     get:
-      description: 获取租户的查询统计信息，包括总查询数、独立用户数、平均延迟等
+      description: 获取租户的查询统计信息，支持按日/周/月分组统计
       parameters:
-      - default: "2025-10-27T00:00:00Z"
-        description: 开始时间（RFC3339格式，默认：7天前）
+      - default: "2025-11-05"
+        description: 开始日期（YYYY-MM-DD格式，默认：7天前）
         in: query
-        name: start_time
+        name: start_date
         type: string
-      - default: "2025-11-03T00:00:00Z"
-        description: 结束时间（RFC3339格式，默认：现在）
+      - default: "2025-11-12"
+        description: 结束日期（YYYY-MM-DD格式，默认：今天）
         in: query
-        name: end_time
+        name: end_date
+        type: string
+      - default: day
+        description: 分组方式：day/week/month（默认：day）
+        in: query
+        name: group_by
         type: string
       produces:
       - application/json
       responses:
         "200":
-          description: 查询统计
+          description: 分组查询统计
           schema:
             allOf:
             - $ref: '#/definitions/middleware.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/repository.QueryStats'
+                  items:
+                    $ref: '#/definitions/repository.QueryStatsGrouped'
+                  type: array
               type: object
         "400":
           description: 请求参数错误
@@ -1381,6 +2417,43 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取可访问的知识库
+      tags:
+      - 用户相关
+  /user/mounts:
+    get:
+      description: 获取当前用户通过租户、组织和个人级别可访问的所有知识库挂载
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 用户挂载列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.SuccessResponse'
+            - properties:
+                data:
+                  properties:
+                    breakdown:
+                      type: object
+                    mounts:
+                      items:
+                        $ref: '#/definitions/models.KnowledgeBaseMount'
+                      type: array
+                    total:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户的所有挂载
       tags:
       - 用户相关
 securityDefinitions:

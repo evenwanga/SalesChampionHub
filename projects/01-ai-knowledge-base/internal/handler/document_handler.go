@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/middleware"
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
@@ -298,6 +302,82 @@ func (h *DocumentHandler) BatchDeleteDocuments(c *gin.Context) {
 	middleware.RespondWithSuccess(c, response)
 }
 
+// BatchUpdateStatus updates status for multiple documents
+// @Summary Batch update document status
+// @Description Update status for multiple documents at once
+// @Tags documents
+// @Accept json
+// @Produce json
+// @Param request body BatchUpdateStatusRequest true "Batch status update request"
+// @Security BearerAuth
+// @Success 200 {object} middleware.SuccessResponse{data=BatchUpdateStatusResponse}
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/batch-update-status [post]
+func (h *DocumentHandler) BatchUpdateStatus(c *gin.Context) {
+	var req BatchUpdateStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondBadRequest(c, "invalid request: "+err.Error())
+		return
+	}
+
+	if len(req.DocumentIDs) == 0 {
+		middleware.RespondBadRequest(c, "document_ids cannot be empty")
+		return
+	}
+
+	if len(req.DocumentIDs) > 100 {
+		middleware.RespondBadRequest(c, "cannot update more than 100 documents at once")
+		return
+	}
+
+	// Validate status
+	validStatuses := map[string]bool{
+		"pending":    true,
+		"processing": true,
+		"completed":  true,
+		"failed":     true,
+	}
+	if !validStatuses[req.Status] {
+		middleware.RespondBadRequest(c, "invalid status")
+		return
+	}
+
+	successCount := 0
+	failedIDs := []string{}
+	var errors []string
+
+	for _, docID := range req.DocumentIDs {
+		if err := h.docService.UpdateDocumentStatus(c.Request.Context(), docID, req.Status, req.SetProcessedAt); err != nil {
+			failedIDs = append(failedIDs, docID)
+			errors = append(errors, fmt.Sprintf("%s: %v", docID, err))
+		} else {
+			successCount++
+
+			// If setting to pending, trigger reprocessing
+			if req.Status == "pending" && req.TriggerReprocess {
+				// Queue for background processing
+				go func(id string) {
+					// Note: In production, use a proper job queue
+					doc, err := h.docService.GetDocument(context.Background(), id)
+					if err == nil {
+						_ = h.docService.ProcessDocument(context.Background(), doc)
+					}
+				}(docID)
+			}
+		}
+	}
+
+	response := BatchUpdateStatusResponse{
+		SuccessCount: successCount,
+		FailedCount:  len(failedIDs),
+		FailedIDs:    failedIDs,
+		Errors:       errors,
+	}
+
+	middleware.RespondWithSuccess(c, response)
+}
+
 // Request/Response DTOs
 
 // UpdateDocumentStatusRequest represents a status update request
@@ -316,4 +396,189 @@ type BatchDeleteResponse struct {
 	SuccessCount int      `json:"success_count"`
 	FailedCount  int      `json:"failed_count"`
 	FailedIDs    []string `json:"failed_ids,omitempty"`
+}
+
+// BatchUpdateStatusRequest represents a batch status update request
+type BatchUpdateStatusRequest struct {
+	DocumentIDs      []string `json:"document_ids" binding:"required,min=1,max=100"`
+	Status           string   `json:"status" binding:"required,oneof=pending processing completed failed"`
+	SetProcessedAt   bool     `json:"set_processed_at"`
+	TriggerReprocess bool     `json:"trigger_reprocess"` // Only for pending status
+}
+
+// BatchUpdateStatusResponse represents the result of a batch status update operation
+type BatchUpdateStatusResponse struct {
+	SuccessCount int      `json:"success_count"`
+	FailedCount  int      `json:"failed_count"`
+	FailedIDs    []string `json:"failed_ids,omitempty"`
+	Errors       []string `json:"errors,omitempty"`
+}
+
+// ListDocumentChunks lists all chunks for a document
+// @Summary List document chunks
+// @Description Get all chunks for a document with pagination
+// @Tags documents
+// @Produce json
+// @Param id path string true "Document ID"
+// @Param limit query int false "Number of results per page" default(50)
+// @Param offset query int false "Offset for pagination" default(0)
+// @Security BearerAuth
+// @Success 200 {object} middleware.SuccessResponse{data=DocumentChunksResponse}
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/{id}/chunks [get]
+func (h *DocumentHandler) ListDocumentChunks(c *gin.Context) {
+	docID := c.Param("id")
+
+	// Parse pagination
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	// Validate limits
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get document (verify it exists and user has access)
+	doc, err := h.docService.GetDocument(c.Request.Context(), docID)
+	if err != nil {
+		if err == repository.ErrDocumentNotFound {
+			middleware.RespondNotFound(c, "document not found")
+			return
+		}
+		middleware.RespondInternalError(c, "failed to get document: "+err.Error())
+		return
+	}
+
+	// Get chunks
+	chunks, total, err := h.docService.ListDocumentChunks(c.Request.Context(), docID, limit, offset)
+	if err != nil {
+		middleware.RespondInternalError(c, "failed to list chunks: "+err.Error())
+		return
+	}
+
+	// Get chunk statistics
+	stats, _ := h.docService.GetChunkStats(c.Request.Context(), docID)
+
+	response := DocumentChunksResponse{
+		DocumentID:   doc.ID,
+		DocumentName: doc.Filename,
+		Chunks:       chunks,
+		Total:        total,
+		Limit:        limit,
+		Offset:       offset,
+		Stats:        stats,
+	}
+
+	middleware.RespondWithSuccess(c, response)
+}
+
+// DocumentChunksResponse represents chunks list response
+type DocumentChunksResponse struct {
+	DocumentID   string                  `json:"document_id"`
+	DocumentName string                  `json:"document_name"`
+	Chunks       []*models.DocumentChunk `json:"chunks"`
+	Total        int64                   `json:"total"`
+	Limit        int                     `json:"limit"`
+	Offset       int                     `json:"offset"`
+	Stats        *repository.ChunkStats  `json:"stats,omitempty"`
+}
+
+// DownloadDocument downloads the original document file
+// @Summary Download document
+// @Description Download the original uploaded document file
+// @Tags documents
+// @Produce octet-stream
+// @Param id path string true "Document ID"
+// @Security BearerAuth
+// @Success 200 {file} binary "Document file"
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/{id}/download [get]
+func (h *DocumentHandler) DownloadDocument(c *gin.Context) {
+	docID := c.Param("id")
+
+	// Get document
+	doc, err := h.docService.GetDocument(c.Request.Context(), docID)
+	if err != nil {
+		if err == repository.ErrDocumentNotFound {
+			middleware.RespondNotFound(c, "document not found")
+			return
+		}
+		middleware.RespondInternalError(c, "failed to get document: "+err.Error())
+		return
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(doc.FilePath); os.IsNotExist(err) {
+		middleware.RespondNotFound(c, "document file not found on server")
+		return
+	}
+
+	// Set response headers
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", doc.Filename))
+	c.Header("Content-Type", doc.FileType)
+
+	// Send file
+	c.File(doc.FilePath)
+}
+
+// PreviewDocument returns the extracted text content
+// @Summary Preview document content
+// @Description Get the extracted text content of a document
+// @Tags documents
+// @Produce json
+// @Param id path string true "Document ID"
+// @Security BearerAuth
+// @Success 200 {object} middleware.SuccessResponse{data=DocumentPreviewResponse}
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /documents/{id}/preview [get]
+func (h *DocumentHandler) PreviewDocument(c *gin.Context) {
+	docID := c.Param("id")
+
+	// Get document
+	doc, err := h.docService.GetDocument(c.Request.Context(), docID)
+	if err != nil {
+		if err == repository.ErrDocumentNotFound {
+			middleware.RespondNotFound(c, "document not found")
+			return
+		}
+		middleware.RespondInternalError(c, "failed to get document: "+err.Error())
+		return
+	}
+
+	// Prepare response
+	response := DocumentPreviewResponse{
+		DocumentID:  doc.ID,
+		Filename:    doc.Filename,
+		FileType:    doc.FileType,
+		FileSize:    doc.FileSize,
+		Status:      doc.Status,
+		Content:     doc.Content,
+		ChunkCount:  doc.ChunkCount,
+		ProcessedAt: doc.ProcessedAt,
+		CreatedAt:   doc.CreatedAt,
+	}
+
+	middleware.RespondWithSuccess(c, response)
+}
+
+// DocumentPreviewResponse represents document preview data
+type DocumentPreviewResponse struct {
+	DocumentID  string     `json:"document_id"`
+	Filename    string     `json:"filename"`
+	FileType    string     `json:"file_type"`
+	FileSize    int64      `json:"file_size"`
+	Status      string     `json:"status"`
+	Content     string     `json:"content"`
+	ChunkCount  int        `json:"chunk_count"`
+	ProcessedAt *time.Time `json:"processed_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 }

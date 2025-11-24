@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHandleSignInCallback } from '@logto/react'
-import { Spin } from 'antd'
+import { Loader2 } from 'lucide-react'
 
 export const Callback: React.FC = () => {
   const navigate = useNavigate()
@@ -19,16 +19,9 @@ export const Callback: React.FC = () => {
   }, [error, navigate])
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      gap: 16
-    }}>
-      <Spin size="large" />
-      <p style={{ fontSize: 16, color: '#666' }}>
+    <div className="flex h-screen flex-col items-center justify-center gap-4">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <p className="text-base text-muted-foreground">
         {isLoading ? '正在登录...' : '登录完成'}
       </p>
     </div>

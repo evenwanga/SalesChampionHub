@@ -1,29 +1,16 @@
 import { useState } from 'react'
-import {
-  Button,
-  Table,
-  Space,
-  Tag,
-  Popconfirm,
-  Card,
-  Statistic,
-  Row,
-  Col,
-  Input,
-  Tooltip,
-  App
-} from 'antd'
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  DatabaseOutlined,
-  FileTextOutlined,
-  BlockOutlined,
-  UserOutlined
-} from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
-import dayjs from 'dayjs'
+import { 
+  Plus, 
+  Edit, 
+  Trash2, 
+  Database, 
+  FileText, 
+  Layers, 
+  User,
+  Building,
+  Users
+} from 'lucide-react'
+import { format } from 'date-fns'
 import {
   useKnowledgeBases,
   useCreateKB,
@@ -33,15 +20,39 @@ import {
 import { KnowledgeBaseForm } from '@/components/KnowledgeBaseForm'
 import type { KnowledgeBase, CreateKBRequest, UpdateKBRequest } from '@/types'
 
-const { Search } = Input
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useToast } from '@/hooks/use-toast'
 
 export const KnowledgeBases: React.FC = () => {
-  const { message } = App.useApp()
+  const { toast } = useToast()
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize] = useState(10)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editingKB, setEditingKB] = useState<KnowledgeBase | undefined>()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingKB, setDeletingKB] = useState<KnowledgeBase | null>(null)
 
   // React Query hooks
   const { data, isLoading, refetch } = useKnowledgeBases({
@@ -74,30 +85,49 @@ export const KnowledgeBases: React.FC = () => {
           id: editingKB.id,
           data: values as UpdateKBRequest
         })
-        message.success('知识库更新成功')
+        toast({
+          title: '成功',
+          description: '知识库更新成功',
+        })
       } else {
         // 创建
         await createMutation.mutateAsync(values as CreateKBRequest)
-        message.success('知识库创建成功')
+        toast({
+          title: '成功',
+          description: '知识库创建成功',
+        })
       }
       setFormOpen(false)
       setEditingKB(undefined)
-      // 手动刷新列表
       refetch()
     } catch (error: any) {
-      message.error(error?.message || '操作失败')
+      toast({
+        variant: 'destructive',
+        title: '错误',
+        description: error?.message || '操作失败',
+      })
     }
   }
 
   // 处理删除
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deletingKB) return
+    
     try {
-      await deleteMutation.mutateAsync(id)
-      message.success('知识库删除成功')
-      // 手动刷新列表
+      await deleteMutation.mutateAsync(deletingKB.id)
+      toast({
+        title: '成功',
+        description: '知识库删除成功',
+      })
+      setDeleteDialogOpen(false)
+      setDeletingKB(null)
       refetch()
     } catch (error: any) {
-      message.error(error?.message || '删除失败')
+      toast({
+        variant: 'destructive',
+        title: '错误',
+        description: error?.message || '删除失败',
+      })
     }
   }
 
@@ -106,226 +136,166 @@ export const KnowledgeBases: React.FC = () => {
     searchKeyword ? kb.name.toLowerCase().includes(searchKeyword.toLowerCase()) : true
   ) || []
 
-  // 表格列定义
-  const columns: ColumnsType<KnowledgeBase> = [
-    {
-      title: '知识库名称',
-      dataIndex: 'name',
-      key: 'name',
-      width: 200,
-      ellipsis: true,
-      render: (text: string) => (
-        <Space>
-          <DatabaseOutlined style={{ color: '#1890ff' }} />
-          <strong>{text}</strong>
-        </Space>
-      )
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-      render: (text: string) => text || <span style={{ color: '#999' }}>暂无描述</span>
-    },
-    {
-      title: '所有者',
-      key: 'owner',
-      width: 200,
-      render: (_: any, record: KnowledgeBase) => {
-        const ownerType = record.owner_type || 'user' // 默认为 user
-        const colorMap: Record<string, string> = {
-          tenant: 'blue',
-          organization: 'green',
-          user: 'purple'
-        }
-        const labelMap: Record<string, string> = {
-          tenant: '租户',
-          organization: '组织',
-          user: '个人'
-        }
-
-        // 如果是用户类型，尝试显示用户名（这里简化处理，实际可能需要查询用户信息）
-        const displayText = ownerType === 'user'
-          ? `个人知识库`
-          : `${labelMap[ownerType] || ownerType}知识库`
-
-        return (
-          <Space>
-            <Tag color={colorMap[ownerType]} icon={ownerType === 'user' ? <UserOutlined /> : undefined}>
-              {labelMap[ownerType] || ownerType}
-            </Tag>
-            <Tooltip title={`ID: ${record.owner_id}`}>
-              <span style={{ fontSize: '12px', color: '#666' }}>{displayText}</span>
-            </Tooltip>
-          </Space>
-        )
-      }
-    },
-    {
-      title: '统计信息',
-      key: 'stats',
-      width: 300,
-      render: (_: any, record: KnowledgeBase) => (
-        <Space size="middle">
-          <Statistic
-            title="文档"
-            value={record.document_count || 0}
-            prefix={<FileTextOutlined />}
-            valueStyle={{ fontSize: 14 }}
-          />
-          <Statistic
-            title="文档块"
-            value={record.chunk_count || 0}
-            prefix={<BlockOutlined />}
-            valueStyle={{ fontSize: 14 }}
-          />
-        </Space>
-      )
-    },
-    {
-      title: '状态',
-      dataIndex: 'is_active',
-      key: 'is_active',
-      width: 80,
-      render: (isActive: boolean) => (
-        <Tag color={isActive ? 'success' : 'default'}>
-          {isActive ? '激活' : '停用'}
-        </Tag>
-      )
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 150,
-      fixed: 'right',
-      render: (_: any, record: KnowledgeBase) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除知识库"${record.name}"吗？此操作不可恢复。`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确认"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              loading={deleteMutation.isPending}
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ]
-
   // 计算总统计
   const totalDocs = data?.data?.reduce((sum, kb) => sum + (kb.document_count || 0), 0) || 0
   const totalChunks = data?.data?.reduce((sum, kb) => sum + (kb.chunk_count || 0), 0) || 0
 
+  // 获取所有者类型图标和标签
+  const getOwnerInfo = (ownerType: string) => {
+    const configs: Record<string, { icon: React.ComponentType<{ className?: string }>, label: string, color: string }> = {
+      tenant: { icon: Building, label: '租户', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' },
+      organization: { icon: Users, label: '组织', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' },
+      user: { icon: User, label: '个人', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' }
+    }
+    return configs[ownerType] || configs.user
+  }
+
   return (
-    <div style={{ padding: '0 24px' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>知识库管理</h1>
-        <p style={{ color: '#666', margin: 0 }}>管理和组织您的知识库资源</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">知识库管理</h1>
+        <p className="text-muted-foreground">管理和组织您的知识库资源</p>
       </div>
 
       {/* 统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="知识库总数"
-              value={data?.meta?.total || 0}
-              prefix={<DatabaseOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="文档总数"
-              value={totalDocs}
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="文档块总数"
-              value={totalChunks}
-              prefix={<BlockOutlined />}
-              valueStyle={{ color: '#722ed1' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">知识库总数</CardTitle>
+            <Database className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data?.meta?.total || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">文档总数</CardTitle>
+            <FileText className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalDocs}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">文档块总数</CardTitle>
+            <Layers className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalChunks}</div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 工具栏 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Search
-            placeholder="搜索知识库名称..."
-            allowClear
-            style={{ width: 300 }}
-            onSearch={setSearchKeyword}
-            onChange={e => !e.target.value && setSearchKeyword('')}
-          />
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleCreate}
-            size="middle"
-          >
-            创建知识库
-          </Button>
-        </Space>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <Input
+              placeholder="搜索知识库名称..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              className="max-w-sm"
+            />
+            <Button onClick={handleCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              创建知识库
+            </Button>
+          </div>
+        </CardContent>
       </Card>
 
       {/* 知识库列表 */}
       <Card>
-        <Table
-          columns={columns}
-          dataSource={filteredData}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{
-            current: page,
-            pageSize: pageSize,
-            total: data?.meta?.total || 0,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个知识库`,
-            onChange: (newPage, newPageSize) => {
-              setPage(newPage)
-              setPageSize(newPageSize)
-            }
-          }}
-          scroll={{ x: 1200 }}
-        />
+        <CardHeader>
+          <CardTitle>知识库列表</CardTitle>
+          <CardDescription>管理您的所有知识库</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              加载中...
+            </div>
+          ) : filteredData.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              暂无数据
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>知识库名称</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead>所有者</TableHead>
+                    <TableHead className="text-center">文档数</TableHead>
+                    <TableHead className="text-center">文档块数</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>创建时间</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredData.map((kb) => {
+                    const ownerInfo = getOwnerInfo(kb.owner_type || 'user')
+                    const OwnerIcon = ownerInfo.icon
+                    return (
+                      <TableRow key={kb.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <Database className="h-4 w-4 text-blue-500" />
+                            {kb.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {kb.description || <span className="text-muted-foreground">暂无描述</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={ownerInfo.color}>
+                            <OwnerIcon className="mr-1 h-3 w-3" />
+                            {ownerInfo.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">{kb.document_count || 0}</TableCell>
+                        <TableCell className="text-center">{kb.chunk_count || 0}</TableCell>
+                        <TableCell>
+                          <Badge variant={kb.is_active ? 'default' : 'secondary'}>
+                            {kb.is_active ? '激活' : '停用'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {format(new Date(kb.created_at), 'yyyy-MM-dd HH:mm')}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(kb)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setDeletingKB(kb)
+                                setDeleteDialogOpen(true)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {/* 创建/编辑表单 */}
@@ -339,6 +309,27 @@ export const KnowledgeBases: React.FC = () => {
         initialValues={editingKB}
         loading={createMutation.isPending || updateMutation.isPending}
       />
+
+      {/* 删除确认对话框 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除知识库 "{deletingKB?.name}" 吗？此操作不可恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

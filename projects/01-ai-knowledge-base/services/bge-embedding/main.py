@@ -3,12 +3,20 @@ BGE Embedding Service
 FastAPI service for generating text embeddings using BGE-large-zh model
 """
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import torch
 from transformers import AutoTokenizer, AutoModel
 import logging
 import time
+import sys
+
+# Ensure UTF-8 encoding for proper Chinese character handling
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
 
 # Configure logging
 logging.basicConfig(
@@ -17,11 +25,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+# Initialize FastAPI app with UTF-8 support
 app = FastAPI(
     title="BGE Embedding Service",
     description="Text embedding service using BGE-large-zh model (1024 dimensions)",
     version="1.0.0"
+)
+
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Global variables for model and tokenizer
@@ -123,9 +140,23 @@ async def generate_embeddings(request: EmbedRequest):
     try:
         start_time = time.time()
 
-        # Tokenize texts
+        # Ensure texts are properly encoded as UTF-8 strings
+        # FastAPI should handle this automatically, but we verify here
+        texts_utf8 = []
+        for text in request.texts:
+            # Ensure the text is a proper UTF-8 string
+            if isinstance(text, bytes):
+                text = text.decode('utf-8', errors='replace')
+            texts_utf8.append(str(text))
+        
+        # Log first few characters of first text for debugging (if Chinese)
+        if texts_utf8 and len(texts_utf8[0]) > 0:
+            sample_text = texts_utf8[0][:50]  # First 50 chars
+            logger.info(f"Processing text sample: {sample_text} (length: {len(texts_utf8[0])})")
+
+        # Tokenize texts with proper UTF-8 encoding
         encoded_input = tokenizer(
-            request.texts,
+            texts_utf8,
             padding=True,
             truncation=True,
             max_length=512,
