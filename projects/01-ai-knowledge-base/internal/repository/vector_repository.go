@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/SalesChampionHub/ai-knowledge-base/internal/models"
 	"gorm.io/gorm"
@@ -136,7 +138,18 @@ func (r *VectorRepository) SimilaritySearch(ctx context.Context, kbIDs []string,
 	}
 
 	// Convert float32 slice to PostgreSQL vector format
-	vectorStr := fmt.Sprintf("[%v]", queryVector)
+	// Use JSON marshaling to get [1,2,3] format which is compatible with pgvector
+	vectorBytes, err := json.Marshal(queryVector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal query vector: %w", err)
+	}
+	vectorStr := string(vectorBytes)
+
+	// Format kbIDs as PostgreSQL array literal: {id1,id2}
+	kbIDsStr := "{}"
+	if len(kbIDs) > 0 {
+		kbIDsStr = "{" + strings.Join(kbIDs, ",") + "}"
+	}
 
 	var results []*SearchResult
 
@@ -156,13 +169,13 @@ func (r *VectorRepository) SimilaritySearch(ctx context.Context, kbIDs []string,
 		FROM vectors v
 		JOIN document_chunks c ON v.chunk_id = c.id
 		JOIN documents d ON c.document_id = d.id
-		WHERE v.kb_id = ANY($2)
+		WHERE v.kb_id = ANY($2::text[])
 			AND d.deleted_at IS NULL
 		ORDER BY distance ASC
 		LIMIT $3
 	`
 
-	if err := r.db.WithContext(ctx).Raw(query, vectorStr, kbIDs, topK).Scan(&results).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(query, vectorStr, kbIDsStr, topK).Scan(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to perform similarity search: %w", err)
 	}
 
@@ -179,8 +192,18 @@ func (r *VectorRepository) HybridSearch(ctx context.Context, kbIDs []string, que
 		topK = 10
 	}
 
-	vectorStr := fmt.Sprintf("[%v]", queryVector)
+	vectorBytes, err := json.Marshal(queryVector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal query vector: %w", err)
+	}
+	vectorStr := string(vectorBytes)
 	searchPattern := "%" + queryText + "%"
+
+	// Format kbIDs as PostgreSQL array literal: {id1,id2}
+	kbIDsStr := "{}"
+	if len(kbIDs) > 0 {
+		kbIDsStr = "{" + strings.Join(kbIDs, ",") + "}"
+	}
 
 	var results []*SearchResult
 
@@ -205,13 +228,13 @@ func (r *VectorRepository) HybridSearch(ctx context.Context, kbIDs []string, que
 		FROM vectors v
 		JOIN document_chunks c ON v.chunk_id = c.id
 		JOIN documents d ON c.document_id = d.id
-		WHERE v.kb_id = ANY($3)
+		WHERE v.kb_id = ANY($3::text[])
 			AND d.deleted_at IS NULL
 		ORDER BY distance ASC
 		LIMIT $4
 	`
 
-	if err := r.db.WithContext(ctx).Raw(query, vectorStr, searchPattern, kbIDs, topK).Scan(&results).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(query, vectorStr, searchPattern, kbIDsStr, topK).Scan(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to perform hybrid search: %w", err)
 	}
 

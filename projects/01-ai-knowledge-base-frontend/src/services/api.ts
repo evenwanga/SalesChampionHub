@@ -39,15 +39,15 @@ api.interceptors.response.use(
     // Handle 401 Unauthorized
     if (error.response?.status === 401) {
       // 清除 token
-      ;(window as any).__logtoAccessToken = undefined
-      
+      ; (window as any).__logtoAccessToken = undefined
+
       // 不要直接使用 window.location.href 重定向，这会导致循环
       // 让应用层（React Router）处理重定向
       console.warn('API returned 401 - Access token is invalid or expired')
-      
+
       // 可选：触发一个自定义事件，让应用监听并处理
-      const event = new CustomEvent('auth:unauthorized', { 
-        detail: { 
+      const event = new CustomEvent('auth:unauthorized', {
+        detail: {
           message: 'Session expired or invalid token',
           timestamp: Date.now()
         }
@@ -56,11 +56,25 @@ api.interceptors.response.use(
     }
 
     // Extract error message
-    const errorMessage =
-      error.response?.data?.message ||
-      error.response?.data?.error ||
-      error.message ||
-      'An unknown error occurred'
+    // Extract error message safely
+    let errorMessage = 'An unknown error occurred'
+    const responseData = error.response?.data
+
+    if (responseData) {
+      if (typeof responseData.message === 'string') {
+        errorMessage = responseData.message
+      } else if (typeof responseData.error === 'string') {
+        errorMessage = responseData.error
+      } else if (responseData.message && typeof responseData.message === 'object') {
+        try {
+          errorMessage = JSON.stringify(responseData.message)
+        } catch (e) {
+          errorMessage = 'Invalid error message format'
+        }
+      }
+    } else if (error.message) {
+      errorMessage = error.message
+    }
 
     // Create a standardized error response
     const apiError: APIResponse = {

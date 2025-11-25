@@ -7,8 +7,7 @@ import { getErrorMessage } from '@/utils/error'
 import { useToast } from '@/hooks/use-toast'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -67,7 +66,7 @@ export const Search: React.FC = () => {
       toast({
         variant: 'destructive',
         title: '搜索失败',
-        description: getErrorMessage(error, '搜索失败，请稍后重试'),
+        description: String(getErrorMessage(error, '搜索失败，请稍后重试')),
       })
     }
   }
@@ -142,7 +141,7 @@ export const Search: React.FC = () => {
             {/* 高级选项 */}
             <div className="space-y-4">
               <Label>高级选项</Label>
-              
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="topK">返回结果数 (Top K)</Label>

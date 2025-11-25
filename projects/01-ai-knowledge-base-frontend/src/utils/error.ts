@@ -14,7 +14,9 @@ export const getErrorMessage = (error: unknown, fallback = '请求失败，请�
 
   if (error && typeof error === 'object') {
     const { message, error: err } = error as ApiErrorLike
-    return message || err || fallback
+    if (typeof message === 'string') return message
+    if (typeof err === 'string') return err
+    return fallback
   }
 
   return fallback

@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -83,15 +84,50 @@ type DocumentChunk struct {
 
 // Vector represents an embedding vector
 type Vector struct {
-	ID        string    `json:"id" gorm:"primaryKey"`
-	ChunkID   string    `json:"chunk_id" gorm:"not null;index"`
-	KBID      string    `json:"kb_id" gorm:"not null;index"`
-	Embedding []float32 `json:"embedding" gorm:"type:vector(1024);not null"`
-	Model     string    `json:"model" gorm:"default:'bge-large-zh'"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string        `json:"id" gorm:"primaryKey"`
+	ChunkID   string        `json:"chunk_id" gorm:"not null;index"`
+	KBID      string        `json:"kb_id" gorm:"not null;index"`
+	Embedding VectorFloat32 `json:"embedding" gorm:"type:vector(1024);not null"`
+	Model     string        `json:"model" gorm:"default:'bge-large-zh'"`
+	CreatedAt time.Time     `json:"created_at"`
 
 	// Relations
 	Chunk *DocumentChunk `json:"chunk,omitempty" gorm:"foreignKey:ChunkID"`
+}
+
+// VectorFloat32 is a custom type for []float32 that implements sql.Scanner and driver.Valuer
+// This is needed for pgvector compatibility with GORM
+type VectorFloat32 []float32
+
+// Value implements driver.Valuer interface for pgvector
+func (v VectorFloat32) Value() (driver.Value, error) {
+	if v == nil {
+		return nil, nil
+	}
+	// Convert []float32 to JSON array string format required by pgvector
+	// pgvector expects: [0.1,0.2,0.3,...]
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+// Scan implements sql.Scanner interface for pgvector
+func (v *VectorFloat32) Scan(value interface{}) error {
+	if value == nil {
+		*v = nil
+		return nil
+	}
+
+	switch val := value.(type) {
+	case []byte:
+		return json.Unmarshal(val, v)
+	case string:
+		return json.Unmarshal([]byte(val), v)
+	default:
+		return fmt.Errorf("cannot scan type %T into VectorFloat32", value)
+	}
 }
 
 // QueryLog represents a query log entry
