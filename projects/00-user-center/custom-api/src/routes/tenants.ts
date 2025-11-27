@@ -14,7 +14,16 @@ router.post('/', validate(createTenantSchema), async (req: Request, res: Respons
     const { name, description, plan } = req.body;
 
     // 创建Logto组织
-    const organization = await logtoClient.createOrganization(name, description);
+    const organization = await logtoClient.createOrganization({ name, description });
+    if (!organization) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'TENANT_CREATION_ERROR',
+          message: 'Failed to create organization',
+        },
+      } as ApiResponse);
+    }
 
     // 初始化租户配额
     await tenantQuotaDb.create({

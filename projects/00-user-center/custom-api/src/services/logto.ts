@@ -359,52 +359,6 @@ class LogtoClient {
     }
   }
 
-  // 创建组织
-  async createOrganization(name: string, description?: string): Promise<Organization> {
-    try {
-      const token = await this.getAdminToken();
-      const response = await axios.post(
-        `${LOGTO_ENDPOINT}/api/organizations`,
-        { name, description },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      return {
-        id: response.data.id,
-        name: response.data.name,
-        description: response.data.description,
-        customData: response.data.customData,
-        createdAt: new Date(response.data.createdAt),
-        isSuspended: false,
-      };
-    } catch (error) {
-      logger.error('Failed to create organization', { name, error });
-      throw error;
-    }
-  }
-
-  // 将用户添加到组织
-  async addUserToOrganization(userId: string, organizationId: string): Promise<void> {
-    try {
-      const token = await this.getAdminToken();
-      await axios.post(
-        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users`,
-        { userIds: [userId] },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      // 清除缓存
-      await permissionCache.clear(userId, organizationId);
-    } catch (error) {
-      logger.error('Failed to add user to organization', { userId, organizationId, error });
-      throw error;
-    }
-  }
-
   // 为用户分配角色
   async assignRoleToUser(
     userId: string,
@@ -427,6 +381,97 @@ class LogtoClient {
     } catch (error) {
       logger.error('Failed to assign role to user', { userId, organizationId, roleId, error });
       throw error;
+    }
+  }
+
+  // 创建组织（可在 customData 中写入父级信息以实现树状层级）
+  async createOrganization(payload: {
+    name: string;
+    description?: string;
+    customData?: Record<string, any>;
+  }): Promise<Organization | null> {
+    try {
+      const token = await this.getAdminToken();
+      const response = await axios.post(
+        `${LOGTO_ENDPOINT}/api/organizations`,
+        {
+          name: payload.name,
+          description: payload.description,
+          customData: payload.customData || {},
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const org = response.data;
+      await cache.del('org:list');
+      return {
+        id: org.id,
+        name: org.name,
+        description: org.description,
+        customData: org.customData,
+        createdAt: new Date(org.createdAt),
+        isSuspended: org.isSuspended || false,
+      };
+    } catch (error) {
+      logger.error('Failed to create organization', { error });
+      return null;
+    }
+  }
+
+  // 创建用户
+  async createUser(payload: {
+    username?: string;
+    password?: string;
+    email?: string;
+    phone?: string;
+    name?: string;
+  }): Promise<User | null> {
+    try {
+      const token = await this.getAdminToken();
+      const response = await axios.post(
+        `${LOGTO_ENDPOINT}/api/users`,
+        {
+          username: payload.username,
+          password: payload.password,
+          primaryEmail: payload.email,
+          primaryPhone: payload.phone,
+          name: payload.name,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const u = response.data;
+      return {
+        id: u.id,
+        username: u.username,
+        email: u.primaryEmail,
+        phone: u.primaryPhone,
+        name: u.name,
+        avatar: u.avatar,
+        createdAt: new Date(u.createdAt),
+        updatedAt: new Date(u.updatedAt || u.createdAt),
+        isSuspended: u.isSuspended || false,
+      };
+    } catch (error) {
+      logger.error('Failed to create user', { error });
+      return null;
+    }
+  }
+
+  // 将用户加入组织
+  async addUserToOrganization(userId: string, organizationId: string): Promise<boolean> {
+    try {
+      const token = await this.getAdminToken();
+      await axios.post(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users`,
+        { userId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      await cache.del(`org:${organizationId}:users`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to add user to organization', { userId, organizationId, error });
+      return false;
     }
   }
 }
