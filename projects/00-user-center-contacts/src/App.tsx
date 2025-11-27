@@ -92,6 +92,9 @@ function App() {
   const [status, setStatus] = useState<Status>({ text: '加载中...', type: 'info' })
   const [orgForm, setOrgForm] = useState({ name: '', description: '', parent: '' })
   const [userForm, setUserForm] = useState({ username: '', name: '', email: '', password: '', orgId: '' })
+  const [loadingOrg, setLoadingOrg] = useState(false)
+  const [loadingUser, setLoadingUser] = useState(false)
+  const [loadingTree, setLoadingTree] = useState(false)
   const tree = useMemo(() => buildTree(contacts), [contacts])
 
   useEffect(() => {
@@ -100,25 +103,30 @@ function App() {
 
   const load = async () => {
     try {
+      setLoadingTree(true)
       setStatus({ text: '加载中...', type: 'info' })
       const data = await fetchContacts()
       setContacts(data)
       setStatus({ text: `已加载 ${data.length} 个组织`, type: 'info' })
     } catch (e: any) {
       setStatus({ text: e.message || '加载失败', type: 'error' })
+    } finally {
+      setLoadingTree(false)
     }
   }
 
   const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
 
   const submitOrg = async () => {
-    if (!orgForm.name.trim()) {
-      setStatus({ text: '请输入组织名称', type: 'error' })
+    const name = orgForm.name.trim()
+    if (name.length < 2) {
+      setStatus({ text: '组织名称至少 2 个字符', type: 'error' })
       return
     }
+    setLoadingOrg(true)
     try {
       await createOrg({
-        name: orgForm.name.trim(),
+        name,
         description: orgForm.description.trim() || undefined,
         parentOrganizationId: orgForm.parent.trim() || undefined,
       })
@@ -127,27 +135,34 @@ function App() {
       load()
     } catch (e: any) {
       setStatus({ text: e.message || '创建组织失败', type: 'error' })
+    } finally {
+      setLoadingOrg(false)
     }
   }
 
   const submitUser = async () => {
-    if (!userForm.username.trim() || !userForm.orgId.trim()) {
-      setStatus({ text: '用户名与组织ID必填', type: 'error' })
+    const username = userForm.username.trim()
+    const orgId = userForm.orgId.trim()
+    if (username.length < 3 || !orgId) {
+      setStatus({ text: '用户名至少 3 个字符且组织ID必填', type: 'error' })
       return
     }
+    setLoadingUser(true)
     try {
       const userId = await createUser({
-        username: userForm.username.trim(),
+        username,
         name: userForm.name.trim() || undefined,
         email: userForm.email.trim() || undefined,
         password: userForm.password || undefined,
       })
-      await addUserToOrg(userForm.orgId.trim(), userId)
+      await addUserToOrg(orgId, userId)
       setUserForm({ username: '', name: '', email: '', password: '', orgId: '' })
       setStatus({ text: '用户已创建并加入组织', type: 'info' })
       load()
     } catch (e: any) {
       setStatus({ text: e.message || '创建用户失败', type: 'error' })
+    } finally {
+      setLoadingUser(false)
     }
   }
 
@@ -172,7 +187,7 @@ function App() {
             <p className="subtitle">基于 Logto 的组织与用户信息</p>
           </div>
         </div>
-        <button className="btn" onClick={load}>刷新</button>
+        <button className="btn" onClick={load} disabled={loadingTree}>刷新</button>
       </div>
 
       <div className="status" style={{ color: status.type === 'error' ? '#b91c1c' : '#6b7280' }}>
@@ -188,7 +203,7 @@ function App() {
             <label>父组织ID<input value={orgForm.parent} onChange={(e) => setOrgForm({ ...orgForm, parent: e.target.value })} /></label>
           </div>
           <div className="form-actions">
-            <button className="btn primary" onClick={submitOrg}>创建组织</button>
+            <button className="btn primary" onClick={submitOrg} disabled={loadingOrg}>创建组织</button>
           </div>
         </div>
 
@@ -202,7 +217,7 @@ function App() {
             <label>组织ID<input value={userForm.orgId} onChange={(e) => setUserForm({ ...userForm, orgId: e.target.value })} /></label>
           </div>
           <div className="form-actions">
-            <button className="btn primary" onClick={submitUser}>创建并加入</button>
+            <button className="btn primary" onClick={submitUser} disabled={loadingUser}>创建并加入</button>
           </div>
         </div>
       </div>

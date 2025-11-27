@@ -1,46 +1,57 @@
 import type { ContactOrg } from './types'
 
-const API_BASE = 'http://localhost:3003/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:3003/api/v1'
+const API_KEY = import.meta.env.VITE_API_KEY
+
+function headers(json = false) {
+  const h: Record<string, string> = {}
+  if (json) h['Content-Type'] = 'application/json'
+  if (API_KEY) h['Authorization'] = `Bearer ${API_KEY}`
+  return h
+}
+
+async function fetchJSON(url: string, init?: RequestInit) {
+  const resp = await fetch(url, init)
+  if (!resp.ok) {
+    const text = await resp.text()
+    throw new Error(`请求失败 ${resp.status}: ${text || resp.statusText}`)
+  }
+  return resp.json()
+}
 
 export async function fetchContacts(): Promise<ContactOrg[]> {
-  const resp = await fetch(`${API_BASE}/contacts`)
-  if (!resp.ok) throw new Error(`加载失败 ${resp.status}`)
-  const json = await resp.json()
+  const json = await fetchJSON(`${API_BASE}/contacts`, { headers: headers() })
   return json.data || []
 }
 
 export async function createOrg(payload: { name: string; description?: string; parentOrganizationId?: string }) {
-  const resp = await fetch(`${API_BASE}/contacts/organizations`, {
+  await fetchJSON(`${API_BASE}/contacts/organizations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(true),
     body: JSON.stringify(payload),
   })
-  if (!resp.ok) throw new Error(`创建失败 ${resp.status}`)
 }
 
 export async function createUser(payload: { username: string; name?: string; email?: string; password?: string }) {
-  const resp = await fetch(`${API_BASE}/contacts/users`, {
+  const json = await fetchJSON(`${API_BASE}/contacts/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(true),
     body: JSON.stringify(payload),
   })
-  if (!resp.ok) throw new Error(`创建用户失败 ${resp.status}`)
-  const json = await resp.json()
   return json.data?.id as string
 }
 
 export async function addUserToOrg(orgId: string, userId: string) {
-  const resp = await fetch(`${API_BASE}/contacts/organizations/${orgId}/users`, {
+  await fetchJSON(`${API_BASE}/contacts/organizations/${orgId}/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(true),
     body: JSON.stringify({ userId }),
   })
-  if (!resp.ok) throw new Error(`添加用户失败 ${resp.status}`)
 }
 
 export async function removeUser(orgId: string, userId: string) {
-  const resp = await fetch(`${API_BASE}/contacts/organizations/${orgId}/users/${userId}`, {
+  await fetchJSON(`${API_BASE}/contacts/organizations/${orgId}/users/${userId}`, {
     method: 'DELETE',
+    headers: headers(),
   })
-  if (!resp.ok) throw new Error(`移除用户失败 ${resp.status}`)
 }
