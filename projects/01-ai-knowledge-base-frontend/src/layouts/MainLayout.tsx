@@ -76,6 +76,11 @@ const navItems: NavItem[] = [
     href: '/monitoring',
     icon: Activity,
   },
+  {
+    title: '通讯录',
+    href: '/contacts',
+    icon: User,
+  },
 ]
 
 export const MainLayout: React.FC = () => {

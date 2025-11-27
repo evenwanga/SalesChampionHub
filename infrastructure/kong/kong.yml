@@ -73,6 +73,22 @@ services:
           - http
           - https
 
+      # 外部API路由 (Key Auth)
+      - name: kb-external-api
+        paths:
+          - /api/v1/external
+        strip_path: false
+        preserve_host: false
+        protocols:
+          - http
+          - https
+        plugins:
+          - name: key-auth
+            config:
+              key_names:
+                - apikey
+              hide_credentials: true
+
     plugins:
       - name: cors
         config:
@@ -106,3 +122,11 @@ plugins:
       header_name: X-Request-ID
       generator: uuid
       echo_downstream: true
+
+# ==========================================
+# 消费者配置
+# ==========================================
+consumers:
+  - username: external-client-001
+    keyauth_credentials:
+      - key: test-api-key-12345

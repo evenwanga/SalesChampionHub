@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, Trash2, FileText, RefreshCw, Eye, File, ChevronDown } from 'lucide-react'
+import { Upload, Trash2, FileText, RefreshCw, Eye, File, ChevronDown, FileCode } from 'lucide-react'
 import { format } from 'date-fns'
 import {
   useDocuments,
@@ -324,7 +324,7 @@ export const Documents: React.FC = () => {
                         标记为已完成
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={handleBatchDelete}
                         className="text-destructive"
                       >
@@ -397,7 +397,11 @@ export const Documents: React.FC = () => {
                       </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-blue-500" />
+                          {doc.filename.toLowerCase().endsWith('.md') ? (
+                            <FileCode className="h-4 w-4 text-purple-500" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-blue-500" />
+                          )}
                           <span className="truncate max-w-xs">{doc.filename}</span>
                         </div>
                       </TableCell>
@@ -414,8 +418,8 @@ export const Documents: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => {
                               setPreviewDoc(doc)

@@ -29,7 +29,8 @@ services:
       - REDIS_DB=1
 
       # 用户中心连接（通过Kong访问）
-      - USER_CENTER_API=${USER_CENTER_API:-http://kong-gateway:8000/api}
+      - USER_CENTER_API=${USER_CENTER_API:-http://user-center-custom-api:3003/api/v1}
+      - USER_CENTER_API_KEY=${USER_CENTER_API_KEY:-d77b773ada0b34d318342f09968a896eb095b4a7cd9d94d3046001ac7ebddb14}
       - USER_CENTER_API_KEY=${USER_CENTER_API_KEY}
       - USER_CENTER_TIMEOUT=30
 

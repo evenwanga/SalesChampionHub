@@ -212,8 +212,10 @@ func main() {
 	kbHandler := handler.NewKBHandler(kbService)
 	searchHandler := handler.NewSearchHandler(searchService, ragService, kbService, queryLogRepo)
 	docHandler := handler.NewDocumentHandler(docService)
+	externalHandler := handler.NewExternalHandler(docService, db)
 	embeddingHandler := handler.NewEmbeddingHandler(embeddingClient)
-	monitoringHandler := handler.NewMonitoringHandler(db, redisClient)
+	monitoringHandler := handler.NewMonitoringHandler(db, redisClient, embeddingClient)
+	contactHandler := handler.NewContactHandler(db)
 	auditHandler := handler.NewAuditHandler(auditService)
 
 	// Initialize audit middleware
@@ -228,14 +230,37 @@ func main() {
 
 	// Health check endpoint (no auth required)
 	router.GET("/health", func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		services := gin.H{
+			"database": "up",
+			"redis":    "up",
+		}
+
+		// 检查向量化服务
+		embedStatus := "unknown"
+		if embeddingClient != nil {
+			if hc, ok := embeddingClient.(interface{ HealthCheck(context.Context) error }); ok {
+				if err := hc.HealthCheck(ctx); err == nil {
+					embedStatus = "up"
+				} else {
+					embedStatus = "down"
+				}
+			} else {
+				if _, err := embeddingClient.EmbedText(ctx, "health check"); err == nil {
+					embedStatus = "up"
+				} else {
+					embedStatus = "down"
+				}
+			}
+			services["embedding"] = embedStatus
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"services": gin.H{
-				"database": "up",
-				"redis":    "up",
-			},
-			"version": "1.0.0",
+			"services":  services,
+			"version":   "1.0.0",
 		})
 	})
 
@@ -251,14 +276,36 @@ func main() {
 
 		// Health check endpoint (no auth required) - same as root /health
 		v1.GET("/health", func(c *gin.Context) {
+			ctx := c.Request.Context()
+
+			services := gin.H{
+				"database": "up",
+				"redis":    "up",
+			}
+
+			embedStatus := "unknown"
+			if embeddingClient != nil {
+				if hc, ok := embeddingClient.(interface{ HealthCheck(context.Context) error }); ok {
+					if err := hc.HealthCheck(ctx); err == nil {
+						embedStatus = "up"
+					} else {
+						embedStatus = "down"
+					}
+				} else {
+					if _, err := embeddingClient.EmbedText(ctx, "health check"); err == nil {
+						embedStatus = "up"
+					} else {
+						embedStatus = "down"
+					}
+				}
+				services["embedding"] = embedStatus
+			}
+
 			c.JSON(http.StatusOK, gin.H{
 				"status":    "healthy",
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
-				"services": gin.H{
-					"database": "up",
-					"redis":    "up",
-				},
-				"version": "1.0.0",
+				"services":  services,
+				"version":   "1.0.0",
 			})
 		})
 
@@ -268,6 +315,9 @@ func main() {
 		authenticated.Use(rlsMiddleware.SetRLSContext())
 		authenticated.Use(auditMiddleware.AuditLogger()) // Add audit logging
 		{
+			// Contacts (通讯录)
+			authenticated.GET("/contacts", contactHandler.GetContacts)
+
 			// User info
 			authenticated.GET("/me", func(c *gin.Context) {
 				userInfo := middleware.GetUserInfo(c)
@@ -349,6 +399,16 @@ func main() {
 
 			// Audit logs endpoints (admin only - should add role check in production)
 			auditHandler.RegisterRoutes(authenticated)
+		}
+
+		// External API routes (Authentication handled by Kong Gateway)
+		// These routes bypass standard auth middleware but enforce RLS manually in handlers
+		external := v1.Group("/external")
+		{
+			externalV1 := external.Group("/v1")
+			{
+				externalV1.POST("/documents", externalHandler.UploadDocumentExternal)
+			}
 		}
 	}
 

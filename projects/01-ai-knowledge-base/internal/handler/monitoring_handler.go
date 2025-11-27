@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/SalesChampionHub/ai-knowledge-base/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -19,13 +20,15 @@ import (
 type MonitoringHandler struct {
 	db          *gorm.DB
 	redisClient *redis.Client
+	embedClient service.EmbeddingClient
 }
 
 // NewMonitoringHandler 创建监控处理器
-func NewMonitoringHandler(db *gorm.DB, redisClient *redis.Client) *MonitoringHandler {
+func NewMonitoringHandler(db *gorm.DB, redisClient *redis.Client, embedClient service.EmbeddingClient) *MonitoringHandler {
 	return &MonitoringHandler{
 		db:          db,
 		redisClient: redisClient,
+		embedClient: embedClient,
 	}
 }
 
@@ -212,6 +215,48 @@ func (h *MonitoringHandler) checkServicesHealth(ctx context.Context) map[string]
 		}
 	}
 
+	// 检查向量化/embedding 服务
+	if h.embedClient != nil {
+		embedStart := time.Now()
+		// 优先使用 HealthCheck
+		if hc, ok := h.embedClient.(interface{ HealthCheck(ctx context.Context) error }); ok {
+			if err := hc.HealthCheck(ctx); err == nil {
+				services["embedding"] = ServiceInfo{
+					Status:    "up",
+					Latency:   time.Since(embedStart).String(),
+					Available: true,
+				}
+			} else {
+				services["embedding"] = ServiceInfo{
+					Status:    "down",
+					Message:   err.Error(),
+					Available: false,
+				}
+			}
+		} else {
+			// 退化为执行一次轻量嵌入
+			if _, err := h.embedClient.EmbedText(ctx, "health check"); err == nil {
+				services["embedding"] = ServiceInfo{
+					Status:    "up",
+					Latency:   time.Since(embedStart).String(),
+					Available: true,
+				}
+			} else {
+				services["embedding"] = ServiceInfo{
+					Status:    "down",
+					Message:   err.Error(),
+					Available: false,
+				}
+			}
+		}
+	} else {
+		services["embedding"] = ServiceInfo{
+			Status:    "down",
+			Message:   "embedding client not initialized",
+			Available: false,
+		}
+	}
+
 	return services
 }
 
@@ -285,4 +330,3 @@ func (h *MonitoringHandler) GetMetricsSnapshot(c *gin.Context) {
 
 	c.JSON(http.StatusOK, snapshot)
 }
-

@@ -21,7 +21,6 @@ export const Dashboard: React.FC = () => {
       icon: Database,
       iconColor: 'text-blue-500',
       bgColor: 'bg-blue-100 dark:bg-blue-950',
-      trend: totalKBs > 0 ? '+' : '',
     },
     {
       title: '文档总数',
@@ -30,7 +29,6 @@ export const Dashboard: React.FC = () => {
       icon: FileText,
       iconColor: 'text-green-500',
       bgColor: 'bg-green-100 dark:bg-green-950',
-      trend: totalDocuments > 0 ? '+' : '',
     },
     {
       title: '今日搜索',

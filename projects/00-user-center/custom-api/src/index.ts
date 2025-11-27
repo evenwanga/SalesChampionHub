@@ -17,6 +17,7 @@ import {
 import authRoutes from './routes/auth';
 import tenantRoutes from './routes/tenants';
 import userRoutes from './routes/users';
+import contactRoutes from './routes/contacts';
 import { connectRedis, checkRedisHealth, closeRedis } from './services/redis';
 import { checkDatabaseHealth, closeDatabase } from './services/database';
 
@@ -121,6 +122,7 @@ if (process.env.AUDIT_LOG_ENABLED !== 'false') {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/tenants', tenantRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/contacts', contactRoutes);
 
 // ==================== 错误处理 ====================
 

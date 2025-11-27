@@ -31,16 +31,39 @@ class LogtoClient {
     try {
       // 这里需要根据实际的Logto配置来获取管理员token
       // 通常需要使用M2M (Machine to Machine) 应用的凭证
-      const response = await axios.post(`${LOGTO_ENDPOINT}/oidc/token`, {
-        grant_type: 'client_credentials',
-        resource: LOGTO_ENDPOINT,
-        scope: 'all',
-      }, {
-        auth: {
-          username: process.env.LOGTO_M2M_APP_ID || '',
-          password: process.env.LOGTO_M2M_APP_SECRET || '',
-        },
-      });
+      const makeRequest = async (withResource: boolean) => {
+        const params = new URLSearchParams();
+        params.append('grant_type', 'client_credentials');
+        params.append('client_id', process.env.LOGTO_M2M_APP_ID || '');
+        params.append('client_secret', process.env.LOGTO_M2M_APP_SECRET || '');
+        params.append('scope', process.env.LOGTO_MANAGEMENT_SCOPE || 'all');
+        if (withResource) {
+          const resource = process.env.LOGTO_MANAGEMENT_RESOURCE;
+          if (resource) {
+            params.append('resource', resource);
+          }
+        }
+        return axios.post(
+          `${LOGTO_ENDPOINT}/oidc/token`,
+          params,
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+          }
+        );
+      };
+
+      let response;
+      try {
+        response = await makeRequest(true);
+      } catch (err: any) {
+        logger.warn('Admin token with resource failed, retry without resource', {
+          status: err?.response?.status,
+          data: err?.response?.data,
+        });
+        response = await makeRequest(false);
+      }
 
       this.adminToken = response.data.access_token;
       this.tokenExpiresAt = now + (response.data.expires_in * 1000);
@@ -151,6 +174,86 @@ class LogtoClient {
     } catch (error) {
       logger.error('Failed to get organization', { organizationId, error });
       return null;
+    }
+  }
+
+  // 列出所有组织
+  async listOrganizations(): Promise<Organization[]> {
+    try {
+      const cacheKey = `org:list`;
+      const cached = await cache.get<Organization[]>(cacheKey);
+      if (cached) return cached;
+
+      const token = await this.getAdminToken();
+      const response = await axios.get(`${LOGTO_ENDPOINT}/api/organizations`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page: 1, limit: 200 },
+      });
+
+      const raw =
+        response.data?.data ||
+        response.data?.items ||
+        response.data?.organizations ||
+        response.data ||
+        [];
+
+      const orgs: Organization[] = (Array.isArray(raw) ? raw : []).map((org: any) => ({
+        id: org.id,
+        name: org.name,
+        description: org.description,
+        customData: org.customData,
+        createdAt: new Date(org.createdAt),
+        isSuspended: org.isSuspended || false,
+      }));
+
+      await cache.set(cacheKey, orgs, 300);
+      return orgs;
+    } catch (error) {
+      logger.error('Failed to list organizations', { error });
+      return [];
+    }
+  }
+
+  // 列出组织内用户
+  async listOrganizationUsers(organizationId: string): Promise<User[]> {
+    try {
+      const cacheKey = `org:${organizationId}:users`;
+      const cached = await cache.get<User[]>(cacheKey);
+      if (cached) return cached;
+
+      const token = await this.getAdminToken();
+      const response = await axios.get(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { page: 1, limit: 500 },
+        }
+      );
+
+      const raw =
+        response.data?.data ||
+        response.data?.items ||
+        response.data?.users ||
+        response.data ||
+        [];
+
+      const users: User[] = (Array.isArray(raw) ? raw : []).map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        email: u.primaryEmail,
+        phone: u.primaryPhone,
+        name: u.name,
+        avatar: u.avatar,
+        createdAt: new Date(u.createdAt),
+        updatedAt: new Date(u.updatedAt || u.createdAt),
+        isSuspended: u.isSuspended || false,
+      }));
+
+      await cache.set(cacheKey, users, 300);
+      return users;
+    } catch (error) {
+      logger.error('Failed to list organization users', { organizationId, error });
+      return [];
     }
   }
 

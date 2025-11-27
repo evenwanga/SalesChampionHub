@@ -17,6 +17,7 @@ import { Assistant } from './pages/Assistant'
 import { Analytics } from './pages/Analytics'
 import { Monitoring } from './pages/Monitoring'
 import AuditLogs from './pages/AuditLogs'
+import Contacts from './pages/Contacts'
 
 // Components
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -77,6 +78,7 @@ function App() {
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="audit-logs" element={<AuditLogs />} />
                 <Route path="monitoring" element={<Monitoring />} />
+                <Route path="contacts" element={<Contacts />} />
               </Route>
 
               {/* Fallback route */}

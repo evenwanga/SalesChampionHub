@@ -42,6 +42,8 @@ services:
       context: ./custom-api
       dockerfile: Dockerfile
     container_name: user-center-custom-api
+    env_file:
+      - ./custom-api/.env
     ports:
       - "3003:3003"
     environment:
@@ -56,6 +58,7 @@ services:
       - REDIS_URL=redis://saleschampion-redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-SalesChampion_Redis_2024}
       - REDIS_DB=0
+      - AUDIT_LOG_ENABLED=false
 
       # 服务密钥（用于服务间调用）
       - SERVICE_API_KEY=${SERVICE_API_KEY}

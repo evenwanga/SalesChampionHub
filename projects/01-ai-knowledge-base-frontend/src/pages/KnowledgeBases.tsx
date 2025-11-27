@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { 
   Plus, 
   Edit, 
@@ -11,6 +11,7 @@ import {
   Users
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { useQuery } from '@tanstack/react-query'
 import {
   useKnowledgeBases,
   useCreateKB,
@@ -19,6 +20,7 @@ import {
 } from '@/hooks/useKnowledgeBases'
 import { KnowledgeBaseForm } from '@/components/KnowledgeBaseForm'
 import type { KnowledgeBase, CreateKBRequest, UpdateKBRequest } from '@/types'
+import documentService from '@/services/documentService'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -136,8 +138,44 @@ export const KnowledgeBases: React.FC = () => {
     searchKeyword ? kb.name.toLowerCase().includes(searchKeyword.toLowerCase()) : true
   ) || []
 
-  // 计算总统计
-  const totalDocs = data?.data?.reduce((sum, kb) => sum + (kb.document_count || 0), 0) || 0
+  // 计算文档总数（优先使用实时接口 total）
+  const { data: docTotals } = useQuery({
+    queryKey: ['kb-docs-total', data?.data?.map(kb => kb.id).join(',')],
+    enabled: !!data?.data?.length,
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        (data?.data || []).map(async (kb) => {
+          const res = await documentService.listDocuments({ kb_id: kb.id, limit: 1, offset: 0 })
+          return { kbId: kb.id, total: res.meta.total || 0 }
+        })
+      )
+
+      const totals: Record<string, number> = {}
+      let sum = 0
+      results.forEach((r) => {
+        if (r.status === 'fulfilled') {
+          totals[r.value.kbId] = r.value.total
+          sum += r.value.total
+        }
+      })
+
+      return { map: totals, sum }
+    },
+    staleTime: 60 * 1000,
+  })
+
+  const fallbackTotals = useMemo(() => {
+    const map: Record<string, number> = {}
+    let sum = 0
+    filteredData.forEach(kb => {
+      const cnt = kb.document_count || 0
+      map[kb.id] = cnt
+      sum += cnt
+    })
+    return { map, sum }
+  }, [filteredData])
+
+  const totalDocs = docTotals?.sum ?? fallbackTotals.sum
   const totalChunks = data?.data?.reduce((sum, kb) => sum + (kb.chunk_count || 0), 0) || 0
 
   // 获取所有者类型图标和标签
@@ -257,7 +295,9 @@ export const KnowledgeBases: React.FC = () => {
                             {ownerInfo.label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">{kb.document_count || 0}</TableCell>
+                      <TableCell className="text-center">
+                        {docTotals?.map?.[kb.id] ?? fallbackTotals.map[kb.id] ?? 0}
+                      </TableCell>
                         <TableCell className="text-center">{kb.chunk_count || 0}</TableCell>
                         <TableCell>
                           <Badge variant={kb.is_active ? 'default' : 'secondary'}>

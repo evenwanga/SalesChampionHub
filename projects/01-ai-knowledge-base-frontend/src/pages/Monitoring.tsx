@@ -1,4 +1,5 @@
-import { Activity, Server, Database, Zap, AlertCircle, CheckCircle } from 'lucide-react'
+import { Activity, Server, Database, Zap, AlertCircle, CheckCircle, Clock3, Gauge, Cpu, MemoryStick, HardDrive, Network } from 'lucide-react'
+import { useMemo } from 'react'
 import { useSystemStatus } from '@/hooks/useMonitoring'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +8,32 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export const Monitoring: React.FC = () => {
   const { data: systemStatus, isLoading } = useSystemStatus(10000) // 10秒刷新一次
+
+  const cpuUsage = useMemo(() => systemStatus?.system?.cpu?.usage_percent ?? 0, [systemStatus])
+  const memoryUsage = useMemo(() => systemStatus?.system?.memory?.used_percent ?? 0, [systemStatus])
+  const memoryTotal = useMemo(() => systemStatus?.system?.memory?.total ?? 0, [systemStatus])
+  const memoryUsed = useMemo(() => systemStatus?.system?.memory?.used ?? 0, [systemStatus])
+  const diskUsage = useMemo(() => systemStatus?.system?.disk?.used_percent ?? 0, [systemStatus])
+  const diskTotal = useMemo(() => systemStatus?.system?.disk?.total ?? 0, [systemStatus])
+  const diskUsed = useMemo(() => systemStatus?.system?.disk?.used ?? 0, [systemStatus])
+  const netRecv = useMemo(() => systemStatus?.system?.network?.bytes_recv ?? 0, [systemStatus])
+  const netSent = useMemo(() => systemStatus?.system?.network?.bytes_sent ?? 0, [systemStatus])
+
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`
+  }
+
+  const formatDuration = (s?: string) => {
+    if (!s) return '未知'
+    // 简单将 "72h3m0.5s" 等格式转成人类可读
+    return s
+      .replace(/h/g, '小时')
+      .replace(/m/g, '分钟')
+      .replace(/s/g, '秒')
+  }
 
   const getStatusBadge = (available: boolean, status: string) => {
     return available ? (
@@ -27,6 +54,39 @@ export const Monitoring: React.FC = () => {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">性能监控</h1>
         <p className="text-muted-foreground">实时监控系统运行状态和性能指标</p>
+      </div>
+
+      {/* 运行概览 */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">系统状态</CardTitle>
+            <Gauge className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {isLoading
+              ? '加载中...'
+              : systemStatus?.status || '未知'}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">运行时长</CardTitle>
+            <Clock3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {isLoading ? '加载中...' : formatDuration(systemStatus?.uptime)}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">版本</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {isLoading ? '加载中...' : systemStatus?.version || '未知'}
+          </CardContent>
+        </Card>
       </div>
 
       {/* 系统状态总览 */}
@@ -132,8 +192,11 @@ export const Monitoring: React.FC = () => {
             <CardDescription>当前系统 CPU 占用</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Progress value={35} className="h-2" />
-            <p className="text-sm text-muted-foreground">35% (模拟数据)</p>
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">{isLoading ? '加载中...' : `${cpuUsage.toFixed(1)}%`}</span>
+            </div>
+            <Progress value={cpuUsage} className="h-2" />
           </CardContent>
         </Card>
 
@@ -143,8 +206,49 @@ export const Monitoring: React.FC = () => {
             <CardDescription>当前系统内存占用</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Progress value={62} className="h-2" />
-            <p className="text-sm text-muted-foreground">62% (模拟数据)</p>
+            <div className="flex items-center gap-2">
+              <MemoryStick className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {isLoading ? '加载中...' : `${memoryUsage.toFixed(1)}% (${(memoryUsed / 1024 / 1024 / 1024).toFixed(2)} / ${(memoryTotal / 1024 / 1024 / 1024).toFixed(2)} GB)`}
+              </span>
+            </div>
+            <Progress value={memoryUsage} className="h-2" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 存储与网络 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>磁盘使用率</CardTitle>
+            <CardDescription>当前磁盘占用</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {isLoading ? '加载中...' : `${diskUsage.toFixed(1)}% (${formatBytes(diskUsed)} / ${formatBytes(diskTotal)})`}
+              </span>
+            </div>
+            <Progress value={diskUsage} className="h-2" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>网络流量</CardTitle>
+            <CardDescription>自启动以来收发字节数</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Network className="h-4 w-4 text-muted-foreground" />
+              <span>接收：{isLoading ? '加载中...' : formatBytes(netRecv)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Network className="h-4 w-4 text-muted-foreground" />
+              <span>发送：{isLoading ? '加载中...' : formatBytes(netSent)}</span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -153,11 +257,11 @@ export const Monitoring: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle>API 响应时间</CardTitle>
-          <CardDescription>最近 24 小时平均响应时间趋势</CardDescription>
+          <CardDescription>最近 24 小时平均响应时间趋势（暂未接入）</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex h-[200px] items-center justify-center text-muted-foreground">
-            响应时间图表开发中...
+            暂无数据
           </div>
         </CardContent>
       </Card>
@@ -166,32 +270,12 @@ export const Monitoring: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle>最近错误</CardTitle>
-          <CardDescription>系统最近的错误和警告</CardDescription>
+          <CardDescription>系统最近的错误和警告（暂无数据源）</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <div className="rounded-lg border p-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-yellow-500" />
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium">API 响应超时</p>
-                  <p className="text-xs text-muted-foreground">
-                    /api/search 端点响应时间超过 3 秒
-                  </p>
-                  <p className="text-xs text-muted-foreground">2 分钟前</p>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium">数据库连接失败</p>
-                  <p className="text-xs text-muted-foreground">连接池已满，等待可用连接</p>
-                  <p className="text-xs text-muted-foreground">15 分钟前</p>
-                </div>
-              </div>
-            </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4" />
+            暂无错误数据源
           </div>
         </CardContent>
       </Card>
