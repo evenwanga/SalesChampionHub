@@ -17,6 +17,7 @@ router.get('/', async (_req: Request, res: Response) => {
       contacts.push({
         tenant_id: org.id,
         organization_name: org.name,
+        parent_id: (org as any).customData?.parentOrganizationId,
         users: users.map((u) => ({
           user_id: u.id,
           username: u.username || u.name,
@@ -155,6 +156,31 @@ router.post('/organizations/:orgId/users', async (req: Request, res: Response) =
     res.status(500).json({
       success: false,
       error: { code: 'ADD_MEMBER_FAILED', message: 'Failed to add user to organization' },
+    } as ApiResponse);
+  }
+});
+
+// DELETE /api/v1/contacts/organizations/:orgId/users/:userId
+router.delete('/organizations/:orgId/users/:userId', async (req: Request, res: Response) => {
+  try {
+    const { orgId, userId } = req.params;
+    const ok = await logtoClient.removeUserFromOrganization(userId, orgId);
+    if (!ok) {
+      return res.status(500).json({
+        success: false,
+        error: { code: 'REMOVE_MEMBER_FAILED', message: 'Failed to remove user from organization' },
+      } as ApiResponse);
+    }
+    res.json({
+      success: true,
+      data: { userId, organizationId: orgId },
+      meta: { timestamp: new Date().toISOString() },
+    } as ApiResponse);
+  } catch (error) {
+    logger.error('Failed to remove user from organization', { error });
+    res.status(500).json({
+      success: false,
+      error: { code: 'REMOVE_MEMBER_FAILED', message: 'Failed to remove user from organization' },
     } as ApiResponse);
   }
 });

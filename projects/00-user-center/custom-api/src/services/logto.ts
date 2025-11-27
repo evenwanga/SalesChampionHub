@@ -474,6 +474,23 @@ class LogtoClient {
       return false;
     }
   }
+
+  // 将用户从组织移除
+  async removeUserFromOrganization(userId: string, organizationId: string): Promise<boolean> {
+    try {
+      const token = await this.getAdminToken();
+      await axios.delete(
+        `${LOGTO_ENDPOINT}/api/organizations/${organizationId}/users/${userId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      await cache.del(`org:${organizationId}:users`);
+      await permissionCache.clear(userId, organizationId);
+      return true;
+    } catch (error) {
+      logger.error('Failed to remove user from organization', { userId, organizationId, error });
+      return false;
+    }
+  }
 }
 
 export const logtoClient = new LogtoClient();
